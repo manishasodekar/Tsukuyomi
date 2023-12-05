@@ -16,18 +16,18 @@ max_poll_records = (multiprocessing.cpu_count() * 2) + 1
 
 
 class KafkaService:
-    def __init__(self):
-        self.post_consumer = self.create_clients()
+    def __init__(self, group_id: str):
+        self.post_consumer = self.create_clients(group_id)
         self.producer = KafkaProducer(bootstrap_servers=heconstants.BOOTSTRAP_SERVERS,
                                       value_serializer=lambda x: x.encode('utf-8'))
 
-    def create_clients(self):
+    def create_clients(self, group_id: str):
         kafka_ping = False
         while kafka_ping == False:
             try:
                 consumer_post_message = KafkaConsumer(heconstants.EXECUTOR_TOPIC,
                                                       bootstrap_servers=heconstants.BOOTSTRAP_SERVERS,
-                                                      group_id=heconstants.GROUP_ID,
+                                                      group_id=group_id,
                                                       enable_auto_commit=False,
                                                       reconnect_backoff_ms=int(heconstants.RECONNECT_BACKOFF_MS),
                                                       retry_backoff_ms=int(heconstants.RETRY_BACKOFF_MS),

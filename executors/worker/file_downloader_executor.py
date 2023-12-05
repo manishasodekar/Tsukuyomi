@@ -4,6 +4,7 @@ import threading
 import traceback
 from datetime import datetime
 import websocket
+import time
 import av
 import time
 import wave
@@ -12,11 +13,14 @@ from io import BytesIO
 from elasticsearch import Elasticsearch
 from utils import heconstants
 from utils.es import Index
-from utils.s3_operation import upload_to_s3, check_file_exists
+from utils.s3_operation import S3SERVICE
 from utils.send_logs import push_logs
 from botocore.exceptions import NoCredentialsError
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
+
+s3 = S3SERVICE()
+producer = KafkaService(group_id="filedownloader")
 
 
 class fileDownloader:
@@ -161,7 +165,6 @@ class fileDownloader:
                       source_type="backend")
             return None
 
-
     def save_rtmp_loop(self,
                        stream_key,
                        user_type,
@@ -222,8 +225,8 @@ class fileDownloader:
                                 "file_paths": current_file_paths + [wav_path],
                                 "stage": "rtmp_saving_started"}
                         s3_file = f"{stream_key}/{stream_key}.json"
-                        if not check_file_exists(s3_file):
-                            upload_to_s3(s3_file, data, is_json=True)
+                        if not s3.check_file_exists(s3_file):
+                            s3.upload_to_s3(s3_file, data, is_json=True)
                         self.logger.info(f"Writing chunks started :: {stream_key}")
                         started = True
 
@@ -238,7 +241,7 @@ class fileDownloader:
 
                         # Upload the finished chunk to S3
                         with open(wav_path, 'rb') as f:
-                            upload_to_s3(key, f.read())
+                            s3.upload_to_s3(key, f.read())
                             data = {
                                 "es_id": f"{stream_key}_ASR_EXECUTOR",
                                 "file_path": key,
@@ -259,7 +262,7 @@ class fileDownloader:
                                 "start_time": str(chunk_start_time),
                                 "end_time": str(datetime.utcnow()),
                             }
-                            KafkaService().publish_executor_message(data)
+                            producer.publish_executor_message(data)
 
                         # Prepare for the next chunk
                         chunk_count += 1
@@ -274,7 +277,7 @@ class fileDownloader:
                 if frames_written > 0:
                     WAV_F.close()
                     with open(wav_path, 'rb') as f:
-                        upload_to_s3(key, f.read())
+                        s3.upload_to_s3(key, f.read())
                         data = {
                             "es_id": f"{stream_key}_ASR_EXECUTOR",
                             "file_path": key,
@@ -295,7 +298,7 @@ class fileDownloader:
                             "start_time": str(chunk_start_time),
                             "end_time": str(datetime.utcnow()),
                         }
-                        KafkaService().publish_executor_message(data)
+                        producer.publish_executor_message(data)
             else:
                 self.logger.info("rtmp_iterator IS NONE")
 
@@ -324,7 +327,7 @@ class fileDownloader:
                 "start_time": str(start_time),
                 "end_time": str(datetime.utcnow()),
             }
-            KafkaService().publish_executor_message(data)
+            producer.publish_executor_message(data)
 
         except Exception as exc:
             msg = "Failed rtmp loop saver :: {}".format(exc)
@@ -350,7 +353,7 @@ class fileDownloader:
                 "start_time": str(start_time),
                 "end_time": str(datetime.utcnow()),
             }
-            KafkaService().publish_executor_message(data)
+            producer.publish_executor_message(data)
 
 
 if __name__ == "__main__":

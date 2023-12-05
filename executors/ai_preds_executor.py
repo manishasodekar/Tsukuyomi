@@ -1,19 +1,17 @@
 import json
-import logging
 import multiprocessing
 import traceback
 from datetime import datetime
 
-import sentry_sdk
-from sentry_sdk import capture_exception, capture_message
+from executors.worker.ai_preds_executor import aiPreds
 from services.kafka.kafka_service import KafkaService
+from config.logconfig import get_logger
 from elasticsearch import Elasticsearch
 from utils import heconstants
-import firebase_admin
 from concurrent.futures import ThreadPoolExecutor
-from executors.worker.asr_executor import ASRExecutor
-kafka_service = KafkaService(group_id="asr")
-from config.logconfig import get_logger
+from executors.worker.file_downloader_executor import fileDownloader
+
+kafka_service = KafkaService(group_id="aipreds")
 logger = get_logger()
 num_of_workers = lambda: (multiprocessing.cpu_count() * 2) + 1
 executor = ThreadPoolExecutor(max_workers=num_of_workers())
@@ -49,15 +47,14 @@ class Executor:
                     if consumer.value.decode('utf-8') != '':
                         if consumer.topic == heconstants.EXECUTOR_TOPIC:
                             message_to_pass = consumer.value.decode('utf-8')
-                            print("message_to_pass", message_to_pass)
                             # kafka_client.commit()
                             start_time = datetime.utcnow()
                             message_dict = json.loads(message_to_pass)
-                            if message_dict.get("state") == "SpeechToText" and not message_dict.get("completed"):
-                                asrexecutor = ASRExecutor()
+                            if message_dict.get("state") == "AiPred" and not message_dict.get("completed"):
+                                aipreds = aiPreds()
                                 stream_key = message_dict.get("care_req_id")
-                                logger.info(f"Starting ASR  :: {stream_key}")
-                                executor.submit(asrexecutor.execute_function, message_dict)
+                                logger.info(f"Starting Downloading File :: {stream_key}")
+                                executor.submit(aipreds.execute_function, message_dict, start_time)
 
         except Exception as exc:
             msg = "post message polling failed :: {}".format(exc)
@@ -67,6 +64,5 @@ class Executor:
 
 
 if __name__ == "__main__":
-    # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ExecutorInstance = Executor()
     ExecutorInstance.executor_task()

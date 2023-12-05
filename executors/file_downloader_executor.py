@@ -14,11 +14,11 @@ import firebase_admin
 from concurrent.futures import ThreadPoolExecutor
 from executors.worker.file_downloader_executor import fileDownloader
 
-kafka_service = KafkaService()
+kafka_service = KafkaService(group_id="filedownloader")
 logger = get_logger()
 num_of_workers = lambda: (multiprocessing.cpu_count() * 2) + 1
 executor = ThreadPoolExecutor(max_workers=num_of_workers())
-kafka_client = kafka_service.create_clients()
+kafka_client = kafka_service.create_clients(group_id="asr")
 
 
 class Executor:

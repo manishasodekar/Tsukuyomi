@@ -2,6 +2,7 @@ import fnmatch
 import json
 import logging
 import os
+from io import BytesIO
 from typing import Optional
 
 import av
@@ -15,6 +16,7 @@ from utils import heconstants
 from utils.s3_operation import S3SERVICE
 from config.logconfig import get_logger
 
+s3 = S3SERVICE()
 
 class ASRExecutor:
     def __init__(self):
@@ -22,7 +24,6 @@ class ASRExecutor:
         self.logger = get_logger()
 
     def get_files_matching_pattern(self, pattern, bucket_name: Optional[str] = None):
-        print("getting list of files")
         json_data_list = []
         credentials = {
             'aws_access_key_id': heconstants.AWS_ACCESS_KEY,
@@ -30,7 +31,6 @@ class ASRExecutor:
         }
         s3_client = boto3.client('s3', 'us-east-2', **credentials)
         try:
-            print("getting list of files")
             if bucket_name is None:
                 bucket_name = "healiom-asr"
             # Extract the prefix from the pattern (up to the first wildcard)
@@ -82,20 +82,15 @@ class ASRExecutor:
 
     def execute_function(self, message):
         try:
-            print("Starting server")
             file_path = message.get("file_path")
             user_name = message.get("user_name")
             conversation_id = message.get("care_req_id")
             force_summary = message.get("force_summary", False)
             api_key = message.get("api_key")
-
             received_at = time.time()
             # previous_conversation_ids_datas = []
-            print("Starting server")
             previous_conversation_ids_datas = self.get_files_matching_pattern(
-                key=f"{conversation_id}/{conversation_id}_*json")
-            print("Starting server")
-            print(f"previous_conversation_ids_datas :: {previous_conversation_ids_datas}")
+                pattern=f"{conversation_id}/{conversation_id}_*json")
             self.logger.info(f"previous_conversation_ids_datas :: {previous_conversation_ids_datas}")
 
             total_duration_until_now = 0
@@ -105,8 +100,6 @@ class ASRExecutor:
                 )
 
             self.logger.info(f"total_duration_until_now :: {total_duration_until_now}")
-            print(f"total_duration_until_now :: {total_duration_until_now}")
-
 
             # if len(user_name.split()) > 1 or len(conversation_id.split()) > 1:
             #     raise Exception("Invalid user_name or conversation_id")
@@ -118,24 +111,23 @@ class ASRExecutor:
             except:
                 pass
 
-            audio_path = os.path.join(conversation_directory, file_path)
+            audio_path = os.path.join(conversation_directory, file_path.split("/")[1])
+            self.logger.info(f"audio_path :: {audio_path}")
 
+            # audio_stream = BytesIO()
             if audio_path:
                 # Read the object from S3 in chunks
                 with open(audio_path, 'wb') as file:
-                    s3_object = get_audio_file(file_path)
+                    s3_object = s3.get_audio_file(file_path)
                     stream = s3_object['Body']
                     while True:
                         chunk = stream.read(2048)
                         if not chunk:
                             break
+                        # audio_stream.write(chunk)
                         file.write(chunk)
             else:
                 raise Exception("No audio file found")
-
-            self.logger.info(f"audio_path :: {audio_path}")
-            print(f"audio_path :: {audio_path}")
-
 
             try:
                 file_type, duration, extension = self.get_audio_video_duration_and_extension(
@@ -167,12 +159,19 @@ class ASRExecutor:
             raise ex
 
         try:
+            # audio_stream.seek(0)
+            # transcription_result = requests.post(
+            #     heconstants.AI_SERVER + "/transcribe/infer",
+            #     files={"f1": audio_stream},
+            # ).json()["prediction"][0]
+            # print("transcription_result ::", transcription_result)
             # todo change fixed ip to DNS
             transcription_result = requests.post(
                 heconstants.AI_SERVER + "/transcribe/infer",
                 files={"f1": open(audio_path, "rb")},
             ).json()["prediction"][0]
         except Exception as ex:
+            print(ex)
             # esquery
             data = {
                 "received_at": received_at,
@@ -182,7 +181,7 @@ class ASRExecutor:
                 "success": False,
                 "audio_path": audio_path,
             }
-            upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
+            s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
             raise Exception("Transcription failed")
 
         current_segments = transcription_result["segments"]
@@ -209,7 +208,7 @@ class ASRExecutor:
                     "audio_path": audio_path,
                     "language": language
                     }
-            upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
+            s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
         except:
             # esquery
             data = {"received_at": received_at,
@@ -222,7 +221,7 @@ class ASRExecutor:
                     "audio_path": audio_path,
                     "language": language,
                     }
-            upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
+            s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
 
 
 # if __name__ == "__main__":
