@@ -9,7 +9,6 @@ s3_client = boto3.client('s3')
 
 
 class S3SERVICE:
-
     def upload_to_s3(self, s3_filename, data, bucket_name: Optional[str] = None, is_json: Optional[bool] = False):
         try:
             if bucket_name is None:
@@ -18,6 +17,19 @@ class S3SERVICE:
                 data = json.dumps(data).encode('utf-8')
             s3_client.put_object(Bucket=bucket_name, Key=s3_filename, Body=data)
             print(f"Upload Successful: {s3_filename}")
+        except FileNotFoundError:
+            print("The file was not found")
+        except NoCredentialsError:
+            print("Credentials not available")
+
+    def get_json_file(self, s3_filename, bucket_name: Optional[str] = None):
+        try:
+            if bucket_name is None:
+                bucket_name = "healiom-asr"
+            s3_object = s3_client.get_object(Bucket=bucket_name, Key=s3_filename)
+            file_content = s3_object['Body'].read().decode('utf-8')
+            json_data = json.loads(file_content)
+            return json_data
         except FileNotFoundError:
             print("The file was not found")
         except NoCredentialsError:
@@ -46,7 +58,6 @@ class S3SERVICE:
     def get_files_matching_pattern(self, pattern, bucket_name: Optional[str] = None):
         json_data_list = []
         try:
-            print("getting list of files")
             if bucket_name is None:
                 bucket_name = "healiom-asr"
             # Extract the prefix from the pattern (up to the first wildcard)
@@ -68,8 +79,11 @@ class S3SERVICE:
                                 print("Credentials not available for file:", obj['Key'])
                             except s3_client.exceptions.ClientError as e:
                                 print(f"An error occurred with file {obj['Key']}: {e}")
-
+            json_data_list.sort(key=lambda x: x['chunk_no'])
             return json_data_list
+        except Exception as exc:
+            self.logger.error(str(exc))
+            return []
         except NoCredentialsError:
             print("Credentials not available")
         except s3_client.exceptions.ClientError as e:
@@ -77,10 +91,13 @@ class S3SERVICE:
             return []
 
     def list_files_in_directory(self, directory, bucket_name: Optional[str] = None):
-        if bucket_name is None:
-            bucket_name = "healiom-asr"
-        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=directory)
-        return [item['Key'] for item in response.get('Contents', [])]
+        try:
+            if bucket_name is None:
+                bucket_name = "healiom-asr"
+            response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=directory)
+            return [item['Key'] for item in response.get('Contents', [])]
+        except Exception as e:
+            print(f"Error listing files: {e}")
 
     def download_from_s3(self, key, local_path, bucket_name: Optional[str] = None):
         try:

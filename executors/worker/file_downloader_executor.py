@@ -1,34 +1,28 @@
 import logging
 import os
-import threading
 import traceback
 from datetime import datetime
-import websocket
-import time
 import av
 import time
 import wave
-import boto3
 from io import BytesIO
-from elasticsearch import Elasticsearch
 from utils import heconstants
 from utils.es import Index
 from utils.s3_operation import S3SERVICE
 from utils.send_logs import push_logs
-from botocore.exceptions import NoCredentialsError
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
 
 s3 = S3SERVICE()
 producer = KafkaService(group_id="filedownloader")
+logger = get_logger()
+logger.setLevel(logging.INFO)
 
 
 class fileDownloader:
 
     def __init__(self):
         self.s16_resampler = av.AudioResampler(format="s16", rate="16000", layout="mono")
-        self.logger = get_logger()
-        self.logger.setLevel(logging.INFO)
 
     def retry_with_backoff(self, function, max_attempts=3):
         for attempt in range(max_attempts):
@@ -54,13 +48,13 @@ class fileDownloader:
             rtmp_stream = self.retry_with_backoff(
                 lambda: av.open(stream_url + stream_key, format="flv", timeout=10)
             )
-            self.logger.info(f"Connection to stream :: {rtmp_stream}")
+            logger.info(f"Connection to stream :: {rtmp_stream}")
             just_reconnected = True  # Set the flag to indicate that we have just reconnected
 
         reconnect_to_stream()
 
         if rtmp_stream is None:
-            self.logger.info("No RTMP stream found")
+            logger.info("No RTMP stream found")
             return None
 
         try:
@@ -68,10 +62,10 @@ class fileDownloader:
             try:
                 aac_audio = next((s for s in rtmp_stream.streams if s.type == 'audio'), None)
             except Exception as e:
-                self.logger.error(f"An unexpected error occurred reading rtmp_stream {e}")
+                logger.error(f"An unexpected error occurred reading rtmp_stream {e}")
 
             if aac_audio is None:
-                self.logger.error(f"An unexpected error occurred aac_audio {e}")
+                logger.error(f"An unexpected error occurred aac_audio {e}")
                 raise av.AVError("No audio stream found in RTMP stream.")
 
             s16_destination = av.open(bytes_buffer, mode="w", format="wav")
@@ -96,17 +90,17 @@ class fileDownloader:
                                     yield bytes(encoded_packet)
 
                 except av.AVError as e:  # Catch specific PyAV exceptions here
-                    self.logger.error(f"PyAV exceptions: {e}")
+                    logger.error(f"PyAV exceptions: {e}")
                     if rtmp_stream:
                         rtmp_stream.close()
                         rtmp_stream = None
                     time.sleep(2)  # Wait before reconnecting
                     self.retry_with_backoff(reconnect_to_stream)
                     if rtmp_stream is None:
-                        self.logger.error("Reconnection failed")
+                        logger.error("Reconnection failed")
                         break  # Implement this function
                     else:
-                        self.logger.info(f"PyAV rtmp_stream: {rtmp_stream}")
+                        logger.info(f"PyAV rtmp_stream: {rtmp_stream}")
                         push_logs(care_request_id=stream_key,
                                   given_msg="Livestream started (RTMP)",
                                   he_type=user_type,
@@ -116,18 +110,18 @@ class fileDownloader:
 
                 except av.error.OSError as e:  # Catch specific PyAV exceptions here
                     if "Input/output error" in str(e):
-                        self.logger.error("Input/output error. Reconnecting...")
-                        self.logger.error(f"PyAV exceptions: {e}")
+                        logger.error("Input/output error. Reconnecting...")
+                        logger.error(f"PyAV exceptions: {e}")
                         if rtmp_stream:
                             rtmp_stream.close()
                             rtmp_stream = None
                         time.sleep(2)  # Wait before reconnecting
                         self.retry_with_backoff(reconnect_to_stream)
                         if rtmp_stream is None:
-                            self.logger.error("Reconnection failed")
+                            logger.error("Reconnection failed")
                             break
                         else:
-                            self.logger.info(f"PyAV rtmp_stream: {rtmp_stream}")
+                            logger.info(f"PyAV rtmp_stream: {rtmp_stream}")
                             push_logs(care_request_id=stream_key,
                                       given_msg="Livestream started (RTMP)",
                                       he_type=user_type,
@@ -136,17 +130,17 @@ class fileDownloader:
                         continue  # Continue the loop after reconnection
 
                 except Exception as e:
-                    self.logger.error(f"Connection lost: {e}")
+                    logger.error(f"Connection lost: {e}")
                     if rtmp_stream:
                         rtmp_stream.close()
                         rtmp_stream = None
                     time.sleep(2)  # Wait before reconnecting
                     self.retry_with_backoff(reconnect_to_stream)
                     if rtmp_stream is None:
-                        self.logger.error("Reconnection failed")
+                        logger.error("Reconnection failed")
                         break  # Implement this function
                     else:
-                        self.logger.info(f"rtmp_stream: {rtmp_stream}")
+                        logger.info(f"rtmp_stream: {rtmp_stream}")
                         push_logs(care_request_id=stream_key,
                                   given_msg="Livestream started (RTMP)",
                                   he_type=user_type,
@@ -156,7 +150,7 @@ class fileDownloader:
 
             s16_destination.close()
         except Exception as e:
-            self.logger.error(f"An unexpected error occurred  {e}")
+            logger.error(f"An unexpected error occurred  {e}")
             time.sleep(10)
             push_logs(care_request_id=stream_key,
                       given_msg="Livestream stopped (RTMP)",
@@ -173,7 +167,7 @@ class fileDownloader:
                        DATA_DIR="healiom_websocket_asr",
                        ):
         try:
-            self.logger.info("Received rtmp stream")
+            logger.info("Received rtmp stream")
             push_logs(care_request_id=stream_key,
                       given_msg="Livestream started (RTMP)",
                       he_type=user_type,
@@ -227,7 +221,7 @@ class fileDownloader:
                         s3_file = f"{stream_key}/{stream_key}.json"
                         if not s3.check_file_exists(s3_file):
                             s3.upload_to_s3(s3_file, data, is_json=True)
-                        self.logger.info(f"Writing chunks started :: {stream_key}")
+                        logger.info(f"Writing chunks started :: {stream_key}")
                         started = True
 
                     key = f"{stream_key}/{stream_key}_chunk{chunk_count}.wav"
@@ -244,6 +238,7 @@ class fileDownloader:
                             s3.upload_to_s3(key, f.read())
                             data = {
                                 "es_id": f"{stream_key}_ASR_EXECUTOR",
+                                "chunk_no": chunk_count,
                                 "file_path": key,
                                 "api_path": "asr",
                                 "api_type": "asr",
@@ -280,6 +275,7 @@ class fileDownloader:
                         s3.upload_to_s3(key, f.read())
                         data = {
                             "es_id": f"{stream_key}_ASR_EXECUTOR",
+                            "chunk_no": chunk_count,
                             "file_path": key,
                             "api_path": "asr",
                             "api_type": "asr",
@@ -300,10 +296,10 @@ class fileDownloader:
                         }
                         producer.publish_executor_message(data)
             else:
-                self.logger.info("rtmp_iterator IS NONE")
+                logger.info("rtmp_iterator IS NONE")
 
             # esquery
-            self.logger.info("Stopped writing chunks")
+            logger.info("Stopped writing chunks")
             script_body = {"doc": {"stage": "rtmp_saving_done"}}
             Index().update(script_body=script_body, doc_id=stream_key)
 
@@ -332,7 +328,7 @@ class fileDownloader:
         except Exception as exc:
             msg = "Failed rtmp loop saver :: {}".format(exc)
             trace = traceback.format_exc()
-            self.logger.error(msg, trace)
+            logger.error(msg, trace)
             data = {
                 "es_id": f"{stream_key}_FILE_DOWNLOADER",
                 "api_path": "asr",

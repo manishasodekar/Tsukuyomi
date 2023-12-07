@@ -2,42 +2,22 @@ import json
 import multiprocessing
 import traceback
 from datetime import datetime
-
 from executors.worker.ai_preds_executor import aiPreds
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
-from elasticsearch import Elasticsearch
 from utils import heconstants
 from concurrent.futures import ThreadPoolExecutor
-from executors.worker.file_downloader_executor import fileDownloader
 
-kafka_service = KafkaService(group_id="aipreds")
 logger = get_logger()
 num_of_workers = lambda: (multiprocessing.cpu_count() * 2) + 1
 executor = ThreadPoolExecutor(max_workers=num_of_workers())
-kafka_client = kafka_service.create_clients(group_id="asr")
+kafka_service = KafkaService(group_id="aipreds")
+kafka_client = kafka_service.create_clients(group_id="aipreds")
 
 
 class Executor:
     def __init__(self):
-        try:
-            if heconstants.es_user is not None and heconstants.es_pass is not None and len(heconstants.es_user) > 0 and \
-                    len(heconstants.es_pass) > 0:
-                heconstants.es_client = Elasticsearch(heconstants.es_host, verify_certs=True, use_ssl=False,
-                                                      send_get_body_as="POST", timeout=60,
-                                                      max_retries=1,
-                                                      http_auth=(heconstants.es_user, heconstants.es_pass))
-            else:
-                heconstants.es_client = Elasticsearch(heconstants.es_host, send_get_body_as="POST", timeout=60,
-                                                      max_retries=1)
-
-            logger.info("ES is up and running.")
-
-        except Exception as exc:
-            msg = "ES startup failed :: {}".format(exc)
-            logger.error(msg)
-            trace = traceback.format_exc()
-            return msg, 500
+        pass
 
     def executor_task(self):
         try:
@@ -53,7 +33,8 @@ class Executor:
                             if message_dict.get("state") == "AiPred" and not message_dict.get("completed"):
                                 aipreds = aiPreds()
                                 stream_key = message_dict.get("care_req_id")
-                                logger.info(f"Starting Downloading File :: {stream_key}")
+                                file_path = message_dict.get("file_path")
+                                logger.info(f"Starting AIPRED :: {stream_key} :: {file_path}")
                                 executor.submit(aipreds.execute_function, message_dict, start_time)
 
         except Exception as exc:
