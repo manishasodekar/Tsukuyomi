@@ -70,27 +70,27 @@ def post_message(stream_key, start_time):
     #     "end_time": str(datetime.utcnow()),
     # }
 
-    data = {
-        "es_id": f"{stream_key}_SOAP",
-        "chunk_no": 42,
-        "file_path": f"{stream_key}/{stream_key}_chunk42.wav",
-        "api_path": "asr",
-        "api_type": "asr",
-        "req_type": "encounter",
-        "executor_name": "SOAP_EXECUTOR",
-        "state": "Analytics",
-        "retry_count": None,
-        "uid": None,
-        "request_id": stream_key,
-        "care_req_id": stream_key,
-        "encounter_id": None,
-        "provider_id": None,
-        "review_provider_id": None,
-        "completed": False,
-        "exec_duration": 0.0,
-        "start_time": str(start_time),
-        "end_time": str(datetime.utcnow()),
-    }
+    # data = {
+    #     "es_id": f"{stream_key}_SOAP",
+    #     "chunk_no": 42,
+    #     "file_path": f"{stream_key}/{stream_key}_chunk42.wav",
+    #     "api_path": "asr",
+    #     "api_type": "asr",
+    #     "req_type": "encounter",
+    #     "executor_name": "SOAP_EXECUTOR",
+    #     "state": "Analytics",
+    #     "retry_count": None,
+    #     "uid": None,
+    #     "request_id": stream_key,
+    #     "care_req_id": stream_key,
+    #     "encounter_id": None,
+    #     "provider_id": None,
+    #     "review_provider_id": None,
+    #     "completed": False,
+    #     "exec_duration": 0.0,
+    #     "start_time": str(start_time),
+    #     "end_time": str(datetime.utcnow()),
+    # }
 
     KafkaService(group_id="asr").publish_executor_message(data)
     print("posted")

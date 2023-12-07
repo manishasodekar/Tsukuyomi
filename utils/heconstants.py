@@ -4,9 +4,7 @@ import json
 import boto3
 from botocore.exceptions import ClientError
 from elasticsearch import Elasticsearch
-os.environ["ENVIRONMENT"] = "dev"
-os.environ["AWS_ACCESS_KEY"] = "AKIA2WUJAEHPOWTHM6HX"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "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"
+
 AWS_ACCESS_KEY = os.environ["AWS_ACCESS_KEY"]
 AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
 env = os.environ["ENVIRONMENT"]
@@ -146,7 +144,6 @@ transcript_index = secret_values.get("TRANSCRIPTION_META_INDEX")
 websocket_logs_index = secret_values.get("WEBSOCKET_LOGS_INDEX")
 RTMP_SERVER_URL = secret_values.get("RTMP_SERVER_URL")
 OPENAI_APIKEY = secret_values.get("OPENAI_APIKEY")
-OPENAI_APIKEY = "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"
 CHUNK_DURATION = 10
 API_KEY = "test_key"
 GPT_MODELS = ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]

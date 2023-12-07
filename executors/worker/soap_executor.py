@@ -28,8 +28,11 @@ remove_lines_with_words = [
 
 
 class soap:
+    def __init__(self):
+        self.logger = get_logger()
+        self.logger.setLevel(logging.INFO)
 
-    def filter_summary_properties(summary_type):
+    def filter_summary_properties(self, summary_type):
         clinical_summary_functions = [
             {
                 "name": "ClinicalSummaries",
@@ -77,14 +80,14 @@ class soap:
                 {"role": "user", "content": f"TEXT: {text}"},
             ]
 
-            summary_function = self.filter_summary_properties(summary_type)
+            # summary_function = self.filter_summary_properties(summary_type=summary_type)
 
             for model_name in heconstants.GPT_MODELS:
                 try:
                     response = openai.ChatCompletion.create(
                         model=model_name,
                         messages=messages,
-                        functions=summary_function,
+                        functions=heconstants.clinical_summary_functions,
                         function_call={"name": "ClinicalSummaries"},
                         temperature=1,
                     )
@@ -99,14 +102,12 @@ class soap:
                     pass
         except Exception as exc:
             msg = "Failed to get OPEN AI SUMMARIES :: {}".format(exc)
-            logger.error(msg)
+            self.logger.error(msg)
 
     def get_merge_ai_preds(self, conversation_id):
         try:
             conversation_datas = s3.get_files_matching_pattern(
                 pattern=f"{conversation_id}/{conversation_id}_*json")
-            logger.info(f"conversation_datas :: {len(conversation_datas)}")
-
             if conversation_datas:
                 merged_segments = []
                 merged_ai_preds = {
@@ -197,7 +198,6 @@ class soap:
             interest_texts = []
             for segment in segments:
                 text = segment["text"]
-                print("text :: ", text)
                 is_imp = False
                 for entity_type, values in last_ai_preds["entities"].items():
                     if is_imp:
@@ -256,12 +256,12 @@ class soap:
                 ]
 
                 data = {"subjectiveClinicalSummary": subjective_summary}
-                logger.info("Interested_text:: ", data)
-                s3.upload_to_s3(f"{conversation_id}/subjectiveClinicalSummary.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/subjectiveClinicalSummary.json",
+                                data.get("subjectiveClinicalSummary"), is_json=True)
             else:
                 data = {"subjectiveClinicalSummary": subjective_summary}
-                logger.info("not Interested_text:: ", data)
-                s3.upload_to_s3(f"{conversation_id}/subjectiveClinicalSummary.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/subjectiveClinicalSummary.json",
+                                data.get("subjectiveClinicalSummary"), is_json=True)
 
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating subjectiveClinicalSummary ::  {e}")
@@ -299,17 +299,17 @@ class soap:
                 data = {
                     "objectiveClinicalSummary": objective_summary,
                 }
-                logger.info("Interested_text:: ", data)
 
-                s3.upload_to_s3(f"{conversation_id}/objectiveClinicalSummary.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/objectiveClinicalSummary.json",
+                                data.get("objectiveClinicalSummary"), is_json=True)
 
             else:
                 data = {
                     "objectiveClinicalSummary": objective_summary,
                 }
-                logger.info("not Interested_text:: ", data)
 
-                s3.upload_to_s3(f"{conversation_id}/objectiveClinicalSummary.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/objectiveClinicalSummary.json",
+                                data.get("objectiveClinicalSummary"), is_json=True)
 
 
         except Exception as e:
@@ -346,16 +346,16 @@ class soap:
                 data = {
                     "clinicalAssessment": clinical_assessment_summary
                 }
-                logger.info("Interested_text:: ", data)
 
-                s3.upload_to_s3(f"{conversation_id}/clinicalAssessment.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/clinicalAssessment.json", data.get("clinicalAssessment"),
+                                is_json=True)
             else:
                 data = {
                     "clinicalAssessment": clinical_assessment_summary
                 }
-                logger.info("not Interested_text:: ", data)
 
-                s3.upload_to_s3(f"{conversation_id}/clinicalAssessment.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/clinicalAssessment.json", data.get("clinicalAssessment"),
+                                is_json=True)
 
 
 
@@ -391,16 +391,14 @@ class soap:
                 data = {
                     "carePlanSuggested": care_plan_summary
                 }
-                logger.info("Interested_text:: ", data)
-
-                s3.upload_to_s3(f"{conversation_id}/carePlanSuggested.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/carePlanSuggested.json", data.get("carePlanSuggested"),
+                                is_json=True)
             else:
                 data = {
                     "carePlanSuggested": care_plan_summary
                 }
-                logger.info("not Interested_text:: ", data)
-
-                s3.upload_to_s3(f"{conversation_id}/carePlanSuggested.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/carePlanSuggested.json", data.get("carePlanSuggested"),
+                                is_json=True)
 
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating carePlanSuggested ::  {e}")

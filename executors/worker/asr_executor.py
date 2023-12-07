@@ -6,7 +6,7 @@ import time
 import requests
 from utils import heconstants
 from utils.s3_operation import S3SERVICE
-from config.logconfig import get_logger
+from pydub.utils import mediainfo
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
 
@@ -19,6 +19,9 @@ logger.setLevel(logging.INFO)
 class ASRExecutor:
     def __init__(self):
         self.AUDIO_DIR = "AUDIOS"
+
+    def get_wav_duration(self, wav_file_path):
+        return float(mediainfo(wav_file_path)["duration"])
 
     def get_audio_video_duration_and_extension(self, file_path):
         try:
@@ -52,7 +55,6 @@ class ASRExecutor:
             # previous_conversation_ids_datas = []
             previous_conversation_ids_datas = s3.get_files_matching_pattern(
                 pattern=f"{conversation_id}/{conversation_id}_*json")
-            logger.info(f"previous_conversation_ids_datas :: {previous_conversation_ids_datas}")
 
             total_duration_until_now = 0
             if previous_conversation_ids_datas:
@@ -94,6 +96,8 @@ class ASRExecutor:
                 file_type, duration, extension = self.get_audio_video_duration_and_extension(
                     audio_path
                 )
+                logger.info(f"duration :: {duration}")
+
             except:
                 os.system(
                     f"ffmpeg -hide_banner -loglevel panic -y -i {audio_path} -acodec pcm_s16le -ac 1 -ar 16000 {audio_path}.wav"
@@ -104,10 +108,6 @@ class ASRExecutor:
                     file_type, duration, extension = self.get_audio_video_duration_and_extension(
                         audio_path
                     )
-                    # logger.info("In exception")
-                    # logger.info(f"file_type :: {file_type}")
-                    # logger.info(f"duration :: {duration}")
-                    # logger.info(f"extension :: {extension}")
                 except:
                     # todo log exception
                     "", 0, os.path.splitext(audio_path)[1]
@@ -146,7 +146,6 @@ class ASRExecutor:
             raise Exception("Transcription failed")
 
         current_segments = transcription_result["segments"]
-        # logger.info(f"current_segments :: {current_segments}")
         for i in range(len(current_segments)):
             current_segments[i]["start"] = (
                     total_duration_until_now + current_segments[i]["start"]
@@ -155,7 +154,6 @@ class ASRExecutor:
                     total_duration_until_now + current_segments[i]["end"]
             )
 
-        # logger.info(f"current_segments :: {current_segments}")
         language = transcription_result["language"]
 
         try:
