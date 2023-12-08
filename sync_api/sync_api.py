@@ -11,15 +11,22 @@ from utils import heconstants
 from utils.es import Index
 from elasticsearch import Elasticsearch
 from config.logconfig import get_logger
+from typing import Optional
 
 logger = get_logger()
 logger.setLevel(logging.INFO)
 s3 = S3SERVICE()
 
 
-def get_merge_ai_preds(conversation_id):
+def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False):
     try:
+        if only_transcribe:
+            logger.info("Only transcription being fetched")
+        else:
+            logger.info("Ai preds and transcription being fetched")
+
         response_json = {}
+        ai_preds_file_path = f"{conversation_id}/ai_preds.json"
         conversation_datas = s3.get_files_matching_pattern(
             pattern=f"{conversation_id}/{conversation_id}_*json")
 
@@ -66,65 +73,75 @@ def get_merge_ai_preds(conversation_id):
                     }
                 )
 
-                ai_preds = conversation_data["ai_preds"]
-                if ai_preds:
-                    for k in [
-                        "age",
-                        "gender",
-                        "ethnicity",
-                        "height",
-                        "weight",
-                        "bmi",
-                        "ethnicity",
-                        "insurance",
-                        "physicalActivityExercise",
-                        "bloodPressure",
-                        "pulse",
-                        "respiratoryRate",
-                        "bodyTemperature",
-                        "substanceAbuse",
-                    ]:
-                        if isinstance(ai_preds.get(k), dict) and ai_preds[k]["text"]:
-                            if not merged_ai_preds[k]["text"]:
-                                merged_ai_preds[k]["text"] = ai_preds[k]["text"]
-                            else:
-                                merged_ai_preds[k]["text"] += ", " + ai_preds[k]["text"]
+                response_json["segments"] = merged_segments
 
-                            merged_ai_preds[k]["value"] = merged_ai_preds[k]["text"]
-                            merged_ai_preds[k]["unit"] = ai_preds[k]["unit"]
+                if not only_transcribe:
+                    ai_preds = conversation_data["ai_preds"]
+                    if ai_preds:
+                        for k in [
+                            "age",
+                            "gender",
+                            "ethnicity",
+                            "height",
+                            "weight",
+                            "bmi",
+                            "ethnicity",
+                            "insurance",
+                            "physicalActivityExercise",
+                            "bloodPressure",
+                            "pulse",
+                            "respiratoryRate",
+                            "bodyTemperature",
+                            "substanceAbuse",
+                        ]:
+                            if isinstance(ai_preds.get(k), dict) and ai_preds[k]["text"]:
+                                if not merged_ai_preds[k]["text"]:
+                                    merged_ai_preds[k]["text"] = ai_preds[k]["text"]
+                                else:
+                                    merged_ai_preds[k]["text"] += ", " + ai_preds[k]["text"]
 
-                    for k, v in ai_preds.get("entities", {}).items():
-                        if k not in merged_ai_preds["entities"]:
-                            merged_ai_preds["entities"][k] = []
-                        merged_ai_preds["entities"][k] += v
+                                merged_ai_preds[k]["value"] = merged_ai_preds[k]["text"]
+                                merged_ai_preds[k]["unit"] = ai_preds[k]["unit"]
 
-            for k in list(merged_ai_preds.keys()):
-                if not merged_ai_preds[k]:
-                    del merged_ai_preds[k]
+                        for k, v in ai_preds.get("entities", {}).items():
+                            if k not in merged_ai_preds["entities"]:
+                                merged_ai_preds["entities"][k] = []
+                            merged_ai_preds["entities"][k] += v
 
-                elif (
-                        isinstance(merged_ai_preds[k], dict)
-                        and "value" in merged_ai_preds[k]
-                        and not merged_ai_preds[k]["value"]
-                ):
-                    del merged_ai_preds[k]
+            if not only_transcribe:
+                for k in list(merged_ai_preds.keys()):
+                    if not merged_ai_preds[k]:
+                        del merged_ai_preds[k]
 
-            for k in list(merged_ai_preds.get("entities", {}).keys()):
-                if not merged_ai_preds["entities"][k]:
-                    del merged_ai_preds["entities"][k]
+                    elif (
+                            isinstance(merged_ai_preds[k], dict)
+                            and "value" in merged_ai_preds[k]
+                            and not merged_ai_preds[k]["value"]
+                    ):
+                        del merged_ai_preds[k]
 
-            for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary", "clinicalAssessment",
-                                 "carePlanSuggested"]:
-                summary_content = s3.get_json_file(s3_filename=f"{conversation_id}/{summary_type}.json")
-                if summary_content:
-                    merged_ai_preds["summaries"][summary_type] = summary_content
+                for k in list(merged_ai_preds.get("entities", {}).keys()):
+                    if not merged_ai_preds["entities"][k]:
+                        del merged_ai_preds["entities"][k]
 
-            response_json["segments"] = merged_segments
+                for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary", "clinicalAssessment",
+                                     "carePlanSuggested"]:
+                    summary_content = s3.get_json_file(s3_filename=f"{conversation_id}/{summary_type}.json")
+                    if summary_content:
+                        merged_ai_preds["summaries"][summary_type] = summary_content
+
+                s3.upload_to_s3(s3_filename=ai_preds_file_path, data=merged_ai_preds, is_json=True)
+
+            if only_transcribe:
+                if s3.check_file_exists(ai_preds_file_path):
+                    merged_ai_preds = s3.get_json_file(ai_preds_file_path)
+
             response_json["ai_preds"] = merged_ai_preds
             response_json["meta"] = audio_metas
             response_json["success"] = True
             if merged_segments:
                 response_json["transcript"] = "\n".join([_["text"] for _ in merged_segments])
+
             return response_json
         return {"success": False,
                 "text": "Transcription not found"}
@@ -136,11 +153,13 @@ def get_merge_ai_preds(conversation_id):
 class History(object):
     def on_get(self, req, resp):
         conversation_id = req.params.get("conversation_id")
+        only_transcribe = req.params.get("only_transcribe")
+
         if not conversation_id:
             self.logger.error("Bad Request with missing conversation_id")
             raise falcon.HTTPError(status=400, description="Bad Request with missing conversation_id parameter")
         resp.media = get_merge_ai_preds(
-            conversation_id
+            conversation_id, only_transcribe
         )
 
 

@@ -1,6 +1,8 @@
 import logging
 import os
 from datetime import datetime
+from io import BytesIO
+
 import av
 import time
 import requests
@@ -123,7 +125,7 @@ class ASRExecutor:
             # audio_stream.seek(0)
             # transcription_result = requests.post(
             #     heconstants.AI_SERVER + "/transcribe/infer",
-            #     files={"f1": audio_stream},
+            #     files={"f1": audio_stream.read()},
             # ).json()["prediction"][0]
             # print("transcription_result ::", transcription_result)
             # todo change fixed ip to DNS
