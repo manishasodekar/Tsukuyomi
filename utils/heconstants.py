@@ -144,7 +144,6 @@ transcript_index = secret_values.get("TRANSCRIPTION_META_INDEX")
 websocket_logs_index = secret_values.get("WEBSOCKET_LOGS_INDEX")
 RTMP_SERVER_URL = secret_values.get("RTMP_SERVER_URL")
 OPENAI_APIKEY = secret_values.get("OPENAI_APIKEY")
-CHUNK_DURATION = 10
 API_KEY = "test_key"
 GPT_MODELS = ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]
 EXECUTOR_TOPIC = "test-executor-queue"
@@ -159,7 +158,8 @@ KAFKA_SLEEP_TIME = secret_values.get('KAFKA_SLEEP_TIME')
 JINCHURIKI_LOGGER_NAME = secret_values.get('JINCHURIKI_LOGGER_NAME')
 TIME_IN_SEC = secret_values.get('TIME_IN_SEC')
 MAX_TIME = secret_values.get('MAX_TIME')
-
+chunk_duration = int(secret_values.get('CHUNK_DURATION'))
 es_host = secret_values.get('ES_HOST')
 es_user = secret_values.get('ES_USER')
 es_pass = secret_values.get('ES_PASS')
+

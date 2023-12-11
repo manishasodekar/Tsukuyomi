@@ -191,7 +191,7 @@ class fileDownloader:
             if rtmp_iterator is not None:
                 started = False
                 chunk_count = 1
-                frames_per_chunk = 16000 * 5  # 5 seconds of frames at 16000 Hz
+                frames_per_chunk = 16000 * heconstants.chunk_duration  # 5 seconds of frames at 16000 Hz
                 bytes_per_frame = 2  # Assuming 16-bit audio (2 bytes per frame)
 
                 while True:
@@ -220,7 +220,7 @@ class fileDownloader:
                         frames_written += len(byte_data) // bytes_per_frame
 
                         current_time = time.time()
-                        if current_time - chunk_start_time >= 5 and frames_written >= frames_per_chunk:
+                        if current_time - chunk_start_time >= heconstants.chunk_duration and frames_written >= frames_per_chunk:
                             break
 
                     WAV_F.close()
@@ -252,7 +252,7 @@ class fileDownloader:
                     producer.publish_executor_message(data)
 
                     chunk_count += 1
-                    if current_time - chunk_start_time < 5:
+                    if current_time - chunk_start_time < heconstants.chunk_duration:
                         # Break the while loop if the last chunk duration is less than 5 seconds
                         break
             else:

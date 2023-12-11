@@ -3,9 +3,10 @@ from typing import Optional
 import fnmatch
 import boto3
 from botocore.exceptions import NoCredentialsError
+from utils import heconstants
 
 # Setup S3 client
-s3_client = boto3.client('s3')
+s3_client = boto3.client('s3', aws_access_key_id=heconstants.AWS_ACCESS_KEY, aws_secret_access_key=heconstants.AWS_SECRET_ACCESS_KEY)
 
 
 class S3SERVICE:

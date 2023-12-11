@@ -179,9 +179,9 @@ def websocket_handler(env, start_response):
                               he_type=user_type,
                               req_type="websocket_stop",
                               source_type="backend")
-
+                    ws.close()
                 try:
-                    aiserver = "http://127.0.0.1:8080"
+                    aiserver = "http://127.0.0.1:12104"
                     if time.time() - last_preds_sent_at >= 15:
                         ai_preds_resp = requests.get(
                             aiserver + f"/history?conversation_id={connection_id}"
@@ -193,35 +193,38 @@ def websocket_handler(env, start_response):
                             aiserver + f"/history?conversation_id={connection_id}&only_transcribe=True"
                         )
                         latest_ai_preds_resp = json.loads(ai_preds_resp.text)
+                    
+                    text = latest_ai_preds_resp.get("text")
+                    is_transcript_not_ready = text == "Transcription not found"
+                    if not is_transcript_not_ready:
+                        try:
+                            logger.info(f"SENDING AI PREDS TO WS :: {ws}")
+                            latest_ai_preds_resp["uid"] = uid
+                            ws.send(json.dumps(latest_ai_preds_resp))
+                            with Timeout(2, False):  # Set the timeout to 2 seconds
+                                message = ws.receive()
+                                logger.info(f"ack :: {message}")
 
-                    try:
-                        logger.info(f"SENDING AI PREDS TO WS :: {ws}")
-                        latest_ai_preds_resp["uid"] = uid
-                        ws.send(json.dumps(latest_ai_preds_resp))
-                        with Timeout(2, False):  # Set the timeout to 2 seconds
-                            message = ws.receive()
-                            logger.info(f"ack :: {message}")
+                        except Timeout:
+                            logger.info("NO ACK RECEIVED CLOSED BY SERVER")
+                            push_logs(care_request_id=connection_id,
+                                      given_msg=f"Websocket has closed by server - NO ACK RECEIVED",
+                                      he_type=user_type,
+                                      req_type="websocket_stop",
+                                      source_type="backend")
+                            ws.close()
+                            break
 
-                    except Timeout:
-                        logger.info("NO ACK RECEIVED CLOSED BY SERVER")
-                        push_logs(care_request_id=connection_id,
-                                  given_msg=f"Websocket has closed by server - NO ACK RECEIVED",
-                                  he_type=user_type,
-                                  req_type="websocket_stop",
-                                  source_type="backend")
-                        ws.close()
-                        break
-
-                    except Exception as ex:
-                        trace = traceback.format_exc()
-                        logger.error(f"CLOSED BY CLIENT :: {ex} :: \n {trace}")
-                        push_logs(care_request_id=connection_id,
-                                  given_msg=f"websocket has closed by client",
-                                  he_type=user_type,
-                                  req_type="websocket_stop",
-                                  source_type="backend")
-                        ws.close()
-                        break
+                        except Exception as ex:
+                            trace = traceback.format_exc()
+                            logger.error(f"CLOSED BY CLIENT :: {ex} :: \n {trace}")
+                            push_logs(care_request_id=connection_id,
+                                      given_msg=f"websocket has closed by client",
+                                      he_type=user_type,
+                                      req_type="websocket_stop",
+                                      source_type="backend")
+                            ws.close()
+                            break
 
                 except Exception as ex:
                     trace = traceback.format_exc()

@@ -95,6 +95,7 @@ class soap:
                     extracted_info = json.loads(
                         response.choices[0]["message"]["function_call"]["arguments"]
                     )
+                    logger.info(f"extracted_info :: {extracted_info}")
                     return extracted_info
 
                 except Exception as ex:
@@ -246,7 +247,8 @@ class soap:
                                                                     summary_type="subjectiveSummary")
                 try:
                     subjective_summary += nltk.sent_tokenize(summaries["subjectiveSummary"])
-                except:
+                except Exception as e:
+                    self.logger.error(f"NLTK error (subjectiveSummary) ::  {e}")
                     pass
 
                 subjective_summary = [
@@ -262,7 +264,7 @@ class soap:
                 data = {"subjectiveClinicalSummary": subjective_summary}
                 s3.upload_to_s3(f"{conversation_id}/subjectiveClinicalSummary.json",
                                 data.get("subjectiveClinicalSummary"), is_json=True)
-
+            logger.info(f"subjectiveClinicalSummary :: {subjective_summary}")
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating subjectiveClinicalSummary ::  {e}")
 
@@ -287,7 +289,8 @@ class soap:
                                                                     summary_type="objectiveSummary")
                 try:
                     objective_summary += nltk.sent_tokenize(summaries["objectiveSummary"])
-                except:
+                except Exception as e:
+                    self.logger.error(f"NLTK error (objectiveSummary) ::  {e}")
                     pass
 
                 objective_summary = [
@@ -311,7 +314,7 @@ class soap:
                 s3.upload_to_s3(f"{conversation_id}/objectiveClinicalSummary.json",
                                 data.get("objectiveClinicalSummary"), is_json=True)
 
-
+            logger.info(f"objectiveClinicalSummary :: {objective_summary}")
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating  objectiveClinicalSummary ::  {e}")
 
@@ -334,7 +337,8 @@ class soap:
                     clinical_assessment_summary += nltk.sent_tokenize(
                         summaries["clinicalAssessmentSummary"]
                     )
-                except:
+                except Exception as e:
+                    self.logger.error(f"NLTK error (clinicalAssessmentSummary) ::  {e}")
                     pass
 
                 clinical_assessment_summary = [
@@ -356,7 +360,7 @@ class soap:
 
                 s3.upload_to_s3(f"{conversation_id}/clinicalAssessment.json", data.get("clinicalAssessment"),
                                 is_json=True)
-
+            logger.info(f"clinicalAssessment:: {clinical_assessment_summary}")
 
 
         except Exception as e:
@@ -379,7 +383,8 @@ class soap:
                                                                     summary_type="carePlanSummary")
                 try:
                     care_plan_summary += nltk.sent_tokenize(summaries["carePlanSummary"])
-                except:
+                except Exception as e:  
+                    self.logger.error(f"NLTK error (carePlanSummary) ::  {e}")
                     pass
 
                 care_plan_summary = [
@@ -399,6 +404,6 @@ class soap:
                 }
                 s3.upload_to_s3(f"{conversation_id}/carePlanSuggested.json", data.get("carePlanSuggested"),
                                 is_json=True)
-
+            logger.info(f"carePlanSuggested :: {care_plan_summary}")
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating carePlanSuggested ::  {e}")
