@@ -8,8 +8,6 @@ import falcon
 import logging
 from utils.s3_operation import S3SERVICE
 from utils import heconstants
-from utils.es import Index
-from elasticsearch import Elasticsearch
 from config.logconfig import get_logger
 from typing import Optional
 
@@ -221,13 +219,5 @@ if __name__ == "__main__":
     }
 
     print(f"AI server active at http://{host}:{port}")
-
-    # if heconstants.es_user is not None and heconstants.es_pass is not None and len(heconstants.es_user) > 0 and len(
-    #         heconstants.es_pass) > 0:
-    #     es_client = Elasticsearch(heconstants.es_host, verify_certs=True, use_ssl=False, send_get_body_as="POST",
-    #                               timeout=60,
-    #                               max_retries=1, http_auth=(heconstants.es_user, heconstants.es_pass))
-    # else:
-    #     es_client = Elasticsearch(heconstants.es_host, send_get_body_as="POST", timeout=60, max_retries=1)
 
     StandaloneApplication(app, options).run()

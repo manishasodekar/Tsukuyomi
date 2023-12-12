@@ -8,7 +8,6 @@ import time
 import wave
 from io import BytesIO
 from utils import heconstants
-from utils.es import Index
 from utils.s3_operation import S3SERVICE
 from utils.send_logs import push_logs
 from services.kafka.kafka_service import KafkaService
@@ -175,18 +174,6 @@ class fileDownloader:
                       req_type="rtmp_start",
                       source_type="backend")
             rtmp_iterator = self.yield_chunks_from_rtmp_stream(stream_key, user_type, stream_url)
-
-            try:
-                # esquery
-                query = {"bool": {"must": [{"match": {"stream_key": stream_key}}]}}
-                resp = Index().search(search_query=query, source_include="file_paths")
-                source = resp[0].get("_source")
-                current_file_paths = source.get("file_paths")
-
-                if not current_file_paths:
-                    current_file_paths = []
-            except:
-                current_file_paths = []
 
             if rtmp_iterator is not None:
                 started = False

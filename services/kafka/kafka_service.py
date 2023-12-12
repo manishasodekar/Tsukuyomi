@@ -55,7 +55,6 @@ class KafkaService:
     def post_poll(self):
         try:
             self.post_consumer.poll(timeout_ms=int(heconstants.CONSUMER_POLL_TIMEOUT))
-            print("Executor polling started")
             logger.info("Executor polling started")
 
         except Exception as exc:

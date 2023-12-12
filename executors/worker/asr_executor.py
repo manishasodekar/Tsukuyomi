@@ -11,6 +11,7 @@ from utils.s3_operation import S3SERVICE
 from pydub.utils import mediainfo
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
+from pydub import AudioSegment
 
 s3 = S3SERVICE()
 producer = KafkaService(group_id="asr")
@@ -79,60 +80,66 @@ class ASRExecutor:
             audio_path = os.path.join(conversation_directory, file_path.split("/")[1])
             logger.info(f"audio_path :: {audio_path}")
 
-            # audio_stream = BytesIO()
+            audio_stream = BytesIO()
             if audio_path:
                 # Read the object from S3 in chunks
-                with open(audio_path, 'wb') as file:
-                    s3_object = s3.get_audio_file(file_path)
-                    stream = s3_object['Body']
-                    while True:
-                        chunk = stream.read(2048)
-                        if not chunk:
-                            break
-                        # audio_stream.write(chunk)
-                        file.write(chunk)
+                # with open(audio_path, 'wb') as file:
+                s3_object = s3.get_audio_file(file_path)
+                stream = s3_object['Body']
+                while True:
+                    chunk = stream.read(2048)
+                    if not chunk:
+                        break
+                    audio_stream.write(chunk)
+                    # file.write(chunk)
             else:
                 raise Exception("No audio file found")
 
-            try:
-                file_type, duration, extension = self.get_audio_video_duration_and_extension(
-                    audio_path
-                )
-                logger.info(f"duration :: {duration}")
-
-            except:
-                os.system(
-                    f"ffmpeg -hide_banner -loglevel panic -y -i {audio_path} -acodec pcm_s16le -ac 1 -ar 16000 {audio_path}.wav"
-                )
-
-                audio_path = audio_path + ".wav"
-                try:
-                    file_type, duration, extension = self.get_audio_video_duration_and_extension(
-                        audio_path
-                    )
-                except:
-                    # todo log exception
-                    "", 0, os.path.splitext(audio_path)[1]
-
-            if not audio_path.endswith(extension):
-                os.rename(audio_path, audio_path + extension)
-                audio_path = audio_path + extension
+            # try:
+            #     file_type, duration, extension = self.get_audio_video_duration_and_extension(
+            #         audio_path
+            #     )
+            #     logger.info(f"duration :: {duration}")
+            #
+            # except:
+            #     os.system(
+            #         f"ffmpeg -hide_banner -loglevel panic -y -i {audio_path} -acodec pcm_s16le -ac 1 -ar 16000 {audio_path}.wav"
+            #     )
+            #
+            #     audio_path = audio_path + ".wav"
+            #     try:
+            #         file_type, duration, extension = self.get_audio_video_duration_and_extension(
+            #             audio_path
+            #         )
+            #     except:
+            #         # todo log exception
+            #         "", 0, os.path.splitext(audio_path)[1]
+            #
+            # if not audio_path.endswith(extension):
+            #     os.rename(audio_path, audio_path + extension)
+            #     audio_path = audio_path + extension
 
         except Exception as ex:
             raise ex
 
         try:
-            # audio_stream.seek(0)
-            # transcription_result = requests.post(
-            #     heconstants.AI_SERVER + "/transcribe/infer",
-            #     files={"f1": audio_stream.read()},
-            # ).json()["prediction"][0]
-            # print("transcription_result ::", transcription_result)
-            # todo change fixed ip to DNS
+            audio_file = audio_stream
+            # Read audio data with pydub
+            audio = AudioSegment.from_file(audio_file, format="wav")
+            duration_in_milliseconds = len(audio)
+            duration = duration_in_milliseconds / 1000.0
+            audio_stream.name = file_path.split("/")[1]
+            audio_stream.seek(0)
             transcription_result = requests.post(
                 heconstants.AI_SERVER + "/transcribe/infer",
-                files={"f1": open(audio_path, "rb")},
+                files={"f1": audio_stream},
             ).json()["prediction"][0]
+            logger.info(f"transcription_result :: {transcription_result}")
+            # todo change fixed ip to DNS
+            # transcription_result = requests.post(
+            #     heconstants.AI_SERVER + "/transcribe/infer",
+            #     files={"f1": open(audio_path, "rb")},
+            # ).json()["prediction"][0]
         except Exception as ex:
             print(ex)
             # esquery
