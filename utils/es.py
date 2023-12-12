@@ -3,12 +3,10 @@ import logging
 import traceback
 from typing import Optional
 from elasticsearch_dsl import Search
-from smartlogger import SmartLogger
-
 from utils import heconstants
+from config.logconfig import get_logger
 
-smart_logger = SmartLogger("RTMP_AI", save_to_dir="./healiom_websocket_asr_logs")
-logger = logging.getLogger("es")
+logger = get_logger()
 
 
 class Index:
@@ -41,7 +39,7 @@ class Index:
             response = s.execute().to_dict()
             return response['hits']['hits']
         except:
-            smart_logger.info(
+            logger.info(
                 f"Couldn't find the document in {heconstants.transcript_index}"
             )
             pass
@@ -64,7 +62,7 @@ class Index:
                 msg = "Unable to update document with id :: {}".format(
                     doc_id)
                 logger.info(msg)
-                smart_logger.info(msg)
+                logger.info(msg)
                 raise Exception(msg) from None
             else:
                 logger.info(f"Document updated succesfully")
@@ -73,9 +71,6 @@ class Index:
             msg = "Failed to update data in {} with exception :: {}".format(heconstants.transcript_index, exc)
             trace = traceback.format_exc()
             logger.error(msg, trace)
-            smart_logger.info(
-                f"Couldn't update the document in {heconstants.transcript_index}"
-            )
             pass
 
     def add(self, data, id: Optional[str] = None, index: Optional[str] = None):
@@ -105,7 +100,4 @@ class Index:
             msg = "Failed to add data in {} with exception :: {}".format(heconstants.transcript_index, exc)
             trace = traceback.format_exc()
             logger.error(msg, trace)
-            smart_logger.info(
-                f"Couldn't index the document in {heconstants.transcript_index}"
-            )
             pass

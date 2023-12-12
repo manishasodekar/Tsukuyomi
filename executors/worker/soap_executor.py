@@ -1,14 +1,15 @@
 import json
 import logging
 from typing import Optional
-
 import nltk
+
 import openai
 from utils import heconstants
 from utils.s3_operation import S3SERVICE
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
 
+nltk.download('punkt')
 s3 = S3SERVICE()
 producer = KafkaService(group_id="soap")
 openai.api_key = heconstants.OPENAI_APIKEY
@@ -95,7 +96,6 @@ class soap:
                     extracted_info = json.loads(
                         response.choices[0]["message"]["function_call"]["arguments"]
                     )
-                    logger.info(f"extracted_info :: {extracted_info}")
                     return extracted_info
 
                 except Exception as ex:
@@ -107,39 +107,39 @@ class soap:
 
     def get_merge_ai_preds(self, conversation_id):
         try:
+            merged_segments = []
+            merged_ai_preds = {
+                "age": {"text": None, "value": None, "unit": None},
+                "gender": {"text": None, "value": None, "unit": None},
+                "height": {"text": None, "value": None, "unit": None},
+                "weight": {"text": None, "value": None, "unit": None},
+                "bmi": {"text": None, "value": None, "unit": None},
+                "ethnicity": {"text": None, "value": None, "unit": None},
+                "insurance": {"text": None, "value": None, "unit": None},
+                "physicalActivityExercise": {"text": None, "value": None, "unit": None},
+                "bloodPressure": {"text": None, "value": None, "unit": None},
+                "pulse": {"text": None, "value": None, "unit": None},
+                "respiratoryRate": {"text": None, "value": None, "unit": None},
+                "bodyTemperature": {"text": None, "value": None, "unit": None},
+                "substanceAbuse": {"text": None, "value": None, "unit": None},
+                "entities": {
+                    "medications": [],
+                    "symptoms": [],
+                    "diseases": [],
+                    "diagnoses": [],
+                    "surgeries": [],
+                    "tests": [],
+                },
+                "summaries": {
+                    "subjectiveClinicalSummary": [],
+                    "objectiveClinicalSummary": [],
+                    "clinicalAssessment": [],
+                    "carePlanSuggested": [],
+                },
+            }
             conversation_datas = s3.get_files_matching_pattern(
                 pattern=f"{conversation_id}/{conversation_id}_*json")
             if conversation_datas:
-                merged_segments = []
-                merged_ai_preds = {
-                    "age": {"text": None, "value": None, "unit": None},
-                    "gender": {"text": None, "value": None, "unit": None},
-                    "height": {"text": None, "value": None, "unit": None},
-                    "weight": {"text": None, "value": None, "unit": None},
-                    "bmi": {"text": None, "value": None, "unit": None},
-                    "ethnicity": {"text": None, "value": None, "unit": None},
-                    "insurance": {"text": None, "value": None, "unit": None},
-                    "physicalActivityExercise": {"text": None, "value": None, "unit": None},
-                    "bloodPressure": {"text": None, "value": None, "unit": None},
-                    "pulse": {"text": None, "value": None, "unit": None},
-                    "respiratoryRate": {"text": None, "value": None, "unit": None},
-                    "bodyTemperature": {"text": None, "value": None, "unit": None},
-                    "substanceAbuse": {"text": None, "value": None, "unit": None},
-                    "entities": {
-                        "medications": [],
-                        "symptoms": [],
-                        "diseases": [],
-                        "diagnoses": [],
-                        "surgeries": [],
-                        "tests": [],
-                    },
-                    "summaries": {
-                        "subjectiveClinicalSummary": [],
-                        "objectiveClinicalSummary": [],
-                        "clinicalAssessment": [],
-                        "carePlanSuggested": [],
-                    },
-                }
                 for conversation_data in conversation_datas:
                     merged_segments += conversation_data["segments"]
 
@@ -193,6 +193,7 @@ class soap:
 
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while merging ai preds  {e}")
+            return merged_segments, merged_ai_preds
 
     def get_interested_text(self, last_ai_preds: dict = None, segments: list = None):
         try:
@@ -216,15 +217,9 @@ class soap:
         except Exception as e:
             self.logger.error(f"An unexpected error occurred  {e}")
 
-    def get_subjective_summary(self, message, start_time):
+    def get_subjective_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
-            segments = []
-            last_ai_preds = {}
-
             conversation_id = message.get("care_req_id")
-            if conversation_id:
-                segments, last_ai_preds = self.get_merge_ai_preds(conversation_id)
-
             subjective_summary = []
             for k in [
                 "age",
@@ -264,19 +259,12 @@ class soap:
                 data = {"subjectiveClinicalSummary": subjective_summary}
                 s3.upload_to_s3(f"{conversation_id}/subjectiveClinicalSummary.json",
                                 data.get("subjectiveClinicalSummary"), is_json=True)
-            logger.info(f"subjectiveClinicalSummary :: {subjective_summary}")
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating subjectiveClinicalSummary ::  {e}")
 
-    def get_objective_summary(self, message, start_time):
+    def get_objective_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
-            segments = []
-            last_ai_preds = {}
-
             conversation_id = message.get("care_req_id")
-            if conversation_id:
-                segments, last_ai_preds = self.get_merge_ai_preds(conversation_id)
-
             objective_summary = []
             for k in ["bloodPressure", "pulse", "respiratoryRate", "bodyTemperature"]:
                 if k in last_ai_preds:
@@ -314,18 +302,12 @@ class soap:
                 s3.upload_to_s3(f"{conversation_id}/objectiveClinicalSummary.json",
                                 data.get("objectiveClinicalSummary"), is_json=True)
 
-            logger.info(f"objectiveClinicalSummary :: {objective_summary}")
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating  objectiveClinicalSummary ::  {e}")
 
-    def get_clinical_assessment_summary(self, message, start_time):
+    def get_clinical_assessment_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
-            segments = []
-            last_ai_preds = {}
-
             conversation_id = message.get("care_req_id")
-            if conversation_id:
-                segments, last_ai_preds = self.get_merge_ai_preds(conversation_id)
 
             clinical_assessment_summary = []
             interest_texts = self.get_interested_text(last_ai_preds, segments)
@@ -366,14 +348,9 @@ class soap:
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating clinicalAssessment ::  {e}")
 
-    def get_care_plan_summary(self, message, start_time):
+    def get_care_plan_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
-            segments = []
-            last_ai_preds = {}
-
             conversation_id = message.get("care_req_id")
-            if conversation_id:
-                segments, last_ai_preds = self.get_merge_ai_preds(conversation_id)
 
             care_plan_summary = []
             interest_texts = self.get_interested_text(last_ai_preds, segments)
@@ -383,7 +360,7 @@ class soap:
                                                                     summary_type="carePlanSummary")
                 try:
                     care_plan_summary += nltk.sent_tokenize(summaries["carePlanSummary"])
-                except Exception as e:  
+                except Exception as e:
                     self.logger.error(f"NLTK error (carePlanSummary) ::  {e}")
                     pass
 
@@ -404,6 +381,5 @@ class soap:
                 }
                 s3.upload_to_s3(f"{conversation_id}/carePlanSuggested.json", data.get("carePlanSuggested"),
                                 is_json=True)
-            logger.info(f"carePlanSuggested :: {care_plan_summary}")
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating carePlanSuggested ::  {e}")

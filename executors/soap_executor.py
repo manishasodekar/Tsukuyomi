@@ -35,10 +35,17 @@ class Executor:
                                 stream_key = message_dict.get("care_req_id")
                                 file_path = message_dict.get("file_path")
                                 logger.info(f"Starting SOAP :: {stream_key} :: {file_path}")
-                                executor.submit(summary.get_subjective_summary, message_dict, start_time)
-                                executor.submit(summary.get_objective_summary, message_dict, start_time)
-                                executor.submit(summary.get_clinical_assessment_summary, message_dict, start_time)
-                                executor.submit(summary.get_care_plan_summary, message_dict, start_time)
+                                segments, last_ai_preds = summary.get_merge_ai_preds(conversation_id=stream_key)
+                                executor.submit(summary.get_subjective_summary, message_dict, start_time, segments,
+                                                last_ai_preds
+                                                )
+                                executor.submit(summary.get_objective_summary, message_dict, start_time, segments,
+                                                last_ai_preds)
+                                executor.submit(summary.get_clinical_assessment_summary, message_dict, start_time,
+                                                segments,
+                                                last_ai_preds)
+                                executor.submit(summary.get_care_plan_summary, message_dict, start_time, segments,
+                                                last_ai_preds)
 
         except Exception as exc:
             msg = "post message polling failed :: {}".format(exc)
