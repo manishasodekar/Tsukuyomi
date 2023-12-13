@@ -4,6 +4,7 @@ monkey.patch_all()
 
 import os
 import time
+import gipc
 import json
 import requests
 import traceback
@@ -11,6 +12,7 @@ from gevent.pywsgi import WSGIServer
 from gevent import Timeout
 from _ws import WebSocketHandler
 import logging
+import rtmp_saver
 from utils import heconstants
 from config.logconfig import get_logger
 from utils.s3_operation import S3SERVICE
@@ -43,7 +45,7 @@ def push_logs(care_request_id: str, given_msg: str, he_type: str, req_type: str,
 
 
 # check if PID is running python
-def check_and_start_rtmp_for_connection_id(connection_id):
+def check_and_start_rtmp(connection_id):
     key = f"{connection_id}/{connection_id}.json"
     IS_FILE_EXIST = s3.check_file_exists(key)
     if IS_FILE_EXIST:
@@ -76,6 +78,48 @@ def check_and_start_rtmp_for_connection_id(connection_id):
             "end_time": str(datetime.utcnow()),
         }
         producer.publish_executor_message(data)
+        return False
+
+
+# check if PID is running python
+def check_and_start_rtmp_for_connection_id(connection_id, user_type, ws):
+    pid_for_connection_id = None
+    data = None
+    try:
+        # esquery
+        logger.info("searching pid")
+        key = f"{connection_id}/{connection_id}.json"
+        data = s3.get_json_file(key)
+        pid_for_connection_id = data.get("pid")
+    except:
+        pass
+
+    is_pid_running = False
+
+    if pid_for_connection_id:
+        try:
+            # check if process with pid exists
+            os.kill(pid_for_connection_id, 0)
+            is_pid_running = False
+        except OSError:
+            is_pid_running = False
+        else:
+            is_pid_running = True
+
+    if is_pid_running and pid_for_connection_id:
+        logger.info("Already running rtmp saver loop")
+        return True
+    else:
+        logger.info("Starting the rtmp saver loop")
+        # start rtmp stream saver in background process using gipc
+        process = gipc.start_process(
+            target=rtmp_saver.save_rtmp_loop,
+            args=(connection_id, user_type, ws),
+        )
+        if data:
+            data["pid"] = process.pid
+            s3.upload_to_s3(key, data, is_json=True)
+
         return False
 
 
@@ -115,7 +159,10 @@ def websocket_handler(env, start_response):
 
         IS_RTMP_ALREADY_RUNNING = False
         if user_type in {"provider", "inclinic"}:
-            IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp_for_connection_id(connection_id)
+            IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp(connection_id)
+            IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp_for_connection_id(
+                connection_id, user_type, ws
+            )
 
         try:
             key = f"{connection_id}/{connection_id}.json"
@@ -146,6 +193,19 @@ def websocket_handler(env, start_response):
             try:
                 key = f"{connection_id}/{connection_id}.json"
                 current_stream_key_info = s3.get_json_file(key)
+                if user_type not in {"provider", "inclinic"}:
+                    transcript_key = f"{connection_id}/transcript.json"
+                    transcript = s3.get_json_file(transcript_key)
+                    ws.send(json.dumps(
+                        {
+                            "transcript": transcript.get("transcript", ""),
+                            "success": True,
+                            "uid": uid,
+                            "segments": [],
+                            "ai_preds": {},
+                            "triage_ai_suggestion": triage_ai_suggestion,
+                        }
+                    ))
             except:
                 time.sleep(2)
                 continue
@@ -181,50 +241,52 @@ def websocket_handler(env, start_response):
                               source_type="backend")
                     ws.close()
                 try:
-                    aiserver = "http://127.0.0.1:12104"
+                    latest_ai_preds_resp = None
                     if time.time() - last_preds_sent_at >= 15:
                         ai_preds_resp = requests.get(
-                            aiserver + f"/history?conversation_id={connection_id}"
+                            heconstants.SYNC_SERVER + f"/history?conversation_id={connection_id}"
                         )
-                        latest_ai_preds_resp = json.loads(ai_preds_resp.text)
+                        if ai_preds_resp.status_code == 200:
+                            latest_ai_preds_resp = json.loads(ai_preds_resp.text)
                         last_preds_sent_at = time.time()
-                    else:
-                        ai_preds_resp = requests.get(
-                            aiserver + f"/history?conversation_id={connection_id}&only_transcribe=True"
-                        )
-                        latest_ai_preds_resp = json.loads(ai_preds_resp.text)
-                    
-                    text = latest_ai_preds_resp.get("text")
-                    is_transcript_not_ready = text == "Transcription not found"
-                    if not is_transcript_not_ready:
-                        try:
-                            logger.info(f"SENDING AI PREDS TO WS :: {ws}")
-                            latest_ai_preds_resp["uid"] = uid
-                            ws.send(json.dumps(latest_ai_preds_resp))
-                            with Timeout(2, False):  # Set the timeout to 2 seconds
-                                message = ws.receive()
-                                logger.info(f"ack :: {message}")
+                    # else:
+                    #     ai_preds_resp = requests.get(
+                    #         aiserver + f"/history?conversation_id={connection_id}&only_transcribe=True"
+                    #     )
+                    #     latest_ai_preds_resp = json.loads(ai_preds_resp.text)
 
-                        except Timeout:
-                            logger.info("NO ACK RECEIVED CLOSED BY SERVER")
-                            push_logs(care_request_id=connection_id,
-                                      given_msg=f"Websocket has closed by server - NO ACK RECEIVED",
-                                      he_type=user_type,
-                                      req_type="websocket_stop",
-                                      source_type="backend")
-                            ws.close()
-                            break
+                    if latest_ai_preds_resp:
+                        text = latest_ai_preds_resp.get("text")
+                        is_transcript_not_ready = text == "Transcription not found"
+                        if not is_transcript_not_ready:
+                            try:
+                                logger.info(f"SENDING AI PREDS TO WS :: {ws}")
+                                latest_ai_preds_resp["uid"] = uid
+                                ws.send(json.dumps(latest_ai_preds_resp))
+                                # with Timeout(2, False):  # Set the timeout to 2 seconds
+                                #     message = ws.receive()
+                                #     logger.info(f"ack :: {message}")
 
-                        except Exception as ex:
-                            trace = traceback.format_exc()
-                            logger.error(f"CLOSED BY CLIENT :: {ex} :: \n {trace}")
-                            push_logs(care_request_id=connection_id,
-                                      given_msg=f"websocket has closed by client",
-                                      he_type=user_type,
-                                      req_type="websocket_stop",
-                                      source_type="backend")
-                            ws.close()
-                            break
+                            except Timeout:
+                                logger.info("NO ACK RECEIVED CLOSED BY SERVER")
+                                push_logs(care_request_id=connection_id,
+                                          given_msg=f"Websocket has closed by server - NO ACK RECEIVED",
+                                          he_type=user_type,
+                                          req_type="websocket_stop",
+                                          source_type="backend")
+                                ws.close()
+                                break
+
+                            except Exception as ex:
+                                trace = traceback.format_exc()
+                                logger.error(f"CLOSED BY CLIENT :: {ex} :: \n {trace}")
+                                push_logs(care_request_id=connection_id,
+                                          given_msg=f"websocket has closed by client",
+                                          he_type=user_type,
+                                          req_type="websocket_stop",
+                                          source_type="backend")
+                                ws.close()
+                                break
 
                 except Exception as ex:
                     trace = traceback.format_exc()

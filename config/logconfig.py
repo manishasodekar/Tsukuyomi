@@ -3,7 +3,7 @@ import sys
 
 from utils import heconstants
 
-logger = logging.getLogger(heconstants.JINCHURIKI_LOGGER_NAME)
+logger = logging.getLogger(heconstants.EXECUTOR_LOGGER_NAME)
 
 if heconstants.LOG_LEVEL == "DEBUG":
     logger.setLevel(logging.DEBUG)
