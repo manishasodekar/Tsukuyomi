@@ -5,10 +5,6 @@ import boto3
 from botocore.exceptions import ClientError
 from elasticsearch import Elasticsearch
 
-os.environ["ENVIRONMENT"] = "dev"
-os.environ["AWS_ACCESS_KEY"] = "AKIA2WUJAEHPOWTHM6HX"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "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"
-
 AWS_ACCESS_KEY = os.environ["AWS_ACCESS_KEY"]
 AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
 env = os.environ["ENVIRONMENT"]
