@@ -5,6 +5,10 @@ import boto3
 from botocore.exceptions import ClientError
 from elasticsearch import Elasticsearch
 
+os.environ["ENVIRONMENT"] = "dev"
+os.environ["AWS_ACCESS_KEY"] = "AKIA2WUJAEHPOWTHM6HX"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "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"
+
 AWS_ACCESS_KEY = os.environ["AWS_ACCESS_KEY"]
 AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
 env = os.environ["ENVIRONMENT"]
@@ -146,7 +150,9 @@ RTMP_SERVER_URL = secret_values.get("RTMP_SERVER_URL")
 OPENAI_APIKEY = secret_values.get("OPENAI_APIKEY")
 API_KEY = "test_key"
 GPT_MODELS = ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]
-EXECUTOR_TOPIC = "test-executor-queue"
+EXECUTOR_TOPIC = secret_values.get("EXECUTOR_TOPIC")
+ASR_BUCKET = secret_values.get("ASR_BUCKET")
+SYNC_SERVER = secret_values.get("SYNC_SERVER")
 BOOTSTRAP_SERVERS = secret_values.get("BOOTSTRAP_SERVERS")
 GROUP_ID = secret_values.get('GROUP_ID')
 CONSUMER_POLL_TIMEOUT = secret_values.get('CONSUMER_POLL_TIMEOUT')
@@ -155,7 +161,7 @@ RETRY_BACKOFF_MS = secret_values.get('RETRY_BACKOFF_MS')
 HEARTBEAT_INTERVAL_MS = secret_values.get('HEARTBEAT_INTERVAL_MS')
 SESSION_TIMEOUT_MS = secret_values.get('SESSION_TIMEOUT_MS')
 KAFKA_SLEEP_TIME = secret_values.get('KAFKA_SLEEP_TIME')
-JINCHURIKI_LOGGER_NAME = secret_values.get('JINCHURIKI_LOGGER_NAME')
+EXECUTOR_LOGGER_NAME = secret_values.get('EXECUTOR_LOGGER_NAME')
 TIME_IN_SEC = secret_values.get('TIME_IN_SEC')
 MAX_TIME = secret_values.get('MAX_TIME')
 chunk_duration = int(secret_values.get('CHUNK_DURATION'))

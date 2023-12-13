@@ -6,14 +6,18 @@ from botocore.exceptions import NoCredentialsError
 from utils import heconstants
 
 # Setup S3 client
-s3_client = boto3.client('s3', aws_access_key_id=heconstants.AWS_ACCESS_KEY, aws_secret_access_key=heconstants.AWS_SECRET_ACCESS_KEY)
+s3_client = boto3.client('s3', aws_access_key_id=heconstants.AWS_ACCESS_KEY,
+                         aws_secret_access_key=heconstants.AWS_SECRET_ACCESS_KEY)
 
 
 class S3SERVICE:
+    def __init__(self):
+        self.default_bucket = heconstants.ASR_BUCKET
+
     def upload_to_s3(self, s3_filename, data, bucket_name: Optional[str] = None, is_json: Optional[bool] = False):
         try:
             if bucket_name is None:
-                bucket_name = "healiom-asr"
+                bucket_name = self.default_bucket
             if is_json:
                 data = json.dumps(data).encode('utf-8')
             s3_client.put_object(Bucket=bucket_name, Key=s3_filename, Body=data)
@@ -26,7 +30,7 @@ class S3SERVICE:
     def get_json_file(self, s3_filename, bucket_name: Optional[str] = None):
         try:
             if bucket_name is None:
-                bucket_name = "healiom-asr"
+                bucket_name = self.default_bucket
             s3_object = s3_client.get_object(Bucket=bucket_name, Key=s3_filename)
             file_content = s3_object['Body'].read().decode('utf-8')
             json_data = json.loads(file_content)
@@ -39,7 +43,7 @@ class S3SERVICE:
     def get_audio_file(self, s3_filename, bucket_name: Optional[str] = None):
         try:
             if bucket_name is None:
-                bucket_name = "healiom-asr"
+                bucket_name = self.default_bucket
             s3_object = s3_client.get_object(Bucket=bucket_name, Key=s3_filename)
             return s3_object
         except FileNotFoundError:
@@ -50,7 +54,7 @@ class S3SERVICE:
     def check_file_exists(self, key, bucket_name: Optional[str] = None):
         try:
             if bucket_name is None:
-                bucket_name = "healiom-asr"
+                bucket_name = self.default_bucket
             s3_client.head_object(Bucket=bucket_name, Key=key)
             return True
         except s3_client.exceptions.ClientError:
@@ -60,7 +64,7 @@ class S3SERVICE:
         json_data_list = []
         try:
             if bucket_name is None:
-                bucket_name = "healiom-asr"
+                bucket_name = self.default_bucket
             # Extract the prefix from the pattern (up to the first wildcard)
             prefix = pattern.split('*')[0]
 
@@ -94,7 +98,7 @@ class S3SERVICE:
     def list_files_in_directory(self, directory, bucket_name: Optional[str] = None):
         try:
             if bucket_name is None:
-                bucket_name = "healiom-asr"
+                bucket_name = self.default_bucket
             response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=directory)
             return [item['Key'] for item in response.get('Contents', [])]
         except Exception as e:
@@ -103,7 +107,7 @@ class S3SERVICE:
     def download_from_s3(self, key, local_path, bucket_name: Optional[str] = None):
         try:
             if bucket_name is None:
-                bucket_name = "healiom-asr"
+                bucket_name = self.default_bucket
             s3_client.download_file(bucket_name, key, local_path)
             print(f"Download Successful: {local_path}")
         except Exception as e:

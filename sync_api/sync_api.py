@@ -137,8 +137,8 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
             response_json["ai_preds"] = merged_ai_preds
             response_json["meta"] = audio_metas
             response_json["success"] = True
-            if merged_segments:
-                response_json["transcript"] = "\n".join([_["text"] for _ in merged_segments])
+            # if merged_segments:
+            #     response_json["transcript"] = "\n".join([_["text"] for _ in merged_segments])
 
             return response_json
         return {"success": False,
