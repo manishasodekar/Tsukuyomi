@@ -207,7 +207,14 @@ class fileDownloader:
                         frames_written += len(byte_data) // bytes_per_frame
 
                         current_time = time.time()
-                        if current_time - chunk_start_time >= heconstants.chunk_duration and frames_written >= frames_per_chunk:
+
+                        # reading chunks for 2 sec + frames written should be more than 2 sec
+                        # if current_time - chunk_start_time >= heconstants.chunk_duration and \
+                        #         frames_written >= frames_per_chunk:
+                        #     break
+
+                        # reading chunks for 2 sec
+                        if current_time - chunk_start_time >= heconstants.chunk_duration:
                             break
 
                     WAV_F.close()
