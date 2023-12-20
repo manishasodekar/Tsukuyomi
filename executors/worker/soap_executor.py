@@ -143,52 +143,55 @@ class soap:
                 for conversation_data in conversation_datas:
                     merged_segments += conversation_data["segments"]
 
-                    ai_preds = conversation_data["ai_preds"]
-                    if ai_preds:
-                        for k in [
-                            "age",
-                            "gender",
-                            "ethnicity",
-                            "height",
-                            "weight",
-                            "bmi",
-                            "ethnicity",
-                            "insurance",
-                            "physicalActivityExercise",
-                            "bloodPressure",
-                            "pulse",
-                            "respiratoryRate",
-                            "bodyTemperature",
-                            "substanceAbuse",
-                        ]:
-                            if isinstance(ai_preds.get(k), dict) and ai_preds[k]["text"]:
-                                if not merged_ai_preds[k]["text"]:
-                                    merged_ai_preds[k]["text"] = ai_preds[k]["text"]
-                                else:
-                                    merged_ai_preds[k]["text"] += ", " + ai_preds[k]["text"]
-
-                                merged_ai_preds[k]["value"] = merged_ai_preds[k]["text"]
-                                merged_ai_preds[k]["unit"] = ai_preds[k]["unit"]
-
-                        for k, v in ai_preds.get("entities", {}).items():
-                            if k not in merged_ai_preds["entities"]:
-                                merged_ai_preds["entities"][k] = []
-                            merged_ai_preds["entities"][k] += v
-
-                for k in list(merged_ai_preds.keys()):
-                    if not merged_ai_preds[k]:
-                        del merged_ai_preds[k]
-
-                    elif (
-                            isinstance(merged_ai_preds[k], dict)
-                            and "value" in merged_ai_preds[k]
-                            and not merged_ai_preds[k]["value"]
-                    ):
-                        del merged_ai_preds[k]
-
-                for k in list(merged_ai_preds.get("entities", {}).keys()):
-                    if not merged_ai_preds["entities"][k]:
-                        del merged_ai_preds["entities"][k]
+            ai_preds_file_path = f"{conversation_id}/ai_preds.json"
+            if s3.check_file_exists(ai_preds_file_path):
+                merged_ai_preds = s3.get_json_file(s3_filename=ai_preds_file_path)
+                #     ai_preds = conversation_data["ai_preds"]
+                #     if ai_preds:
+                #         for k in [
+                #             "age",
+                #             "gender",
+                #             "ethnicity",
+                #             "height",
+                #             "weight",
+                #             "bmi",
+                #             "ethnicity",
+                #             "insurance",
+                #             "physicalActivityExercise",
+                #             "bloodPressure",
+                #             "pulse",
+                #             "respiratoryRate",
+                #             "bodyTemperature",
+                #             "substanceAbuse",
+                #         ]:
+                #             if isinstance(ai_preds.get(k), dict) and ai_preds[k]["text"]:
+                #                 if not merged_ai_preds[k]["text"]:
+                #                     merged_ai_preds[k]["text"] = ai_preds[k]["text"]
+                #                 else:
+                #                     merged_ai_preds[k]["text"] += ", " + ai_preds[k]["text"]
+                #
+                #                 merged_ai_preds[k]["value"] = merged_ai_preds[k]["text"]
+                #                 merged_ai_preds[k]["unit"] = ai_preds[k]["unit"]
+                #
+                #         for k, v in ai_preds.get("entities", {}).items():
+                #             if k not in merged_ai_preds["entities"]:
+                #                 merged_ai_preds["entities"][k] = []
+                #             merged_ai_preds["entities"][k] += v
+                #
+                # for k in list(merged_ai_preds.keys()):
+                #     if not merged_ai_preds[k]:
+                #         del merged_ai_preds[k]
+                #
+                #     elif (
+                #             isinstance(merged_ai_preds[k], dict)
+                #             and "value" in merged_ai_preds[k]
+                #             and not merged_ai_preds[k]["value"]
+                #     ):
+                #         del merged_ai_preds[k]
+                #
+                # for k in list(merged_ai_preds.get("entities", {}).keys()):
+                #     if not merged_ai_preds["entities"][k]:
+                #         del merged_ai_preds["entities"][k]
             return merged_segments, merged_ai_preds
 
         except Exception as e:

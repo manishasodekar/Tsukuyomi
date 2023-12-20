@@ -66,16 +66,13 @@ class aiPreds:
             file_path = message.get("file_path")
             chunk_no = message.get("chunk_no")
             retry_count = message.get("retry_count")
-            current_segment = s3.get_json_file(file_path.replace("wav", "json"))
-            segments = current_segment.get("segments")
-            text = ""
-            if segments:
-                text = "\n".join([seg["text"] for seg in segments])
+            merged_segments = []
+            conversation_datas = s3.get_files_matching_pattern(
+                pattern=f"{conversation_id}/{conversation_id}_*json")
+            if conversation_datas:
+                for conversation_data in conversation_datas:
+                    merged_segments += conversation_data["segments"]
 
-            extracted_info = self.get_preds_from_open_ai(
-                text, heconstants.faster_clinical_info_extraction_functions, min_length=5
-            )
-            extracted_info = self.clean_pred(extracted_info)
             entities = {
                 "age": {"text": None, "value": None, "unit": None},
                 "gender": {"text": None, "value": None, "unit": None},
@@ -106,78 +103,96 @@ class aiPreds:
                 },
             }
 
-            for _ in extracted_info.get("details", []):
-                if _["name"] in entities:
-                    if entities[_["name"]]["text"] is None:
-                        entities[_["name"]]["text"] = _["value"]
-                    else:
-                        entities[_["name"]]["text"] += ", " + _["value"]
+            ai_preds_file_path = f"{conversation_id}/ai_preds.json"
+            if s3.check_file_exists(ai_preds_file_path):
+                entities = s3.get_json_file(ai_preds_file_path)
 
-                    entities[_["name"]]["value"] = entities[_["name"]]["text"]
+            # current_segment = s3.get_json_file(file_path.replace("wav", "json"))
+            # segments = current_segment.get("segments")
+            # if segments:
+            #     text = "\n".join([seg["text"] for seg in segments])
 
-            all_texts_and_types = []
-            for k in ["medications", "symptoms", "diseases", "diagnoses", "surgeries", "tests"]:
-                v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
-                for _ in v:
-                    if _.strip():
-                        all_texts_and_types.append((_.strip(), k))
+            if merged_segments:
+                text = "\n".join([_["text"] for _ in merged_segments])
 
-            text_to_codes = {}
+                extracted_info = self.get_preds_from_open_ai(
+                    text, heconstants.faster_clinical_info_extraction_functions, min_length=5
+                )
+                extracted_info = self.clean_pred(extracted_info)
 
-            if all_texts_and_types:
-                try:
-                    codes = \
-                    requests.post(heconstants.AI_SERVER + "/code_search/infer", json=all_texts_and_types).json()[
-                        'prediction']
-                except:
-                    codes = [{"name": _, "code": None} for _ in all_texts_and_types]
+                for _ in extracted_info.get("details", []):
+                    if _["name"] in entities:
+                        if entities[_["name"]]["text"] is None:
+                            entities[_["name"]]["text"] = _["value"]
+                        else:
+                            entities[_["name"]]["text"] += ", " + _["value"]
 
-                for (text, _type), code in zip(all_texts_and_types, codes):
-                    text_to_codes[text] = {"name": code["name"], "code": code["code"], "score": code.get("score")}
+                        entities[_["name"]]["value"] = entities[_["name"]]["text"]
 
-            for k in ["medications", "symptoms", "diseases", "diagnoses", "surgeries", "tests"]:
-                v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
-                v = [
-                    {
-                        "text": _.strip(),
-                        "code": text_to_codes.get(_.strip(), {}).get("code", None),
-                        "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
-                        "code_type": "",
-                        "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
-                    }
-                    for _ in v
-                    if _.strip()
-                ]
-                entities["entities"][k] = v
+                all_texts_and_types = []
+                for k in ["medications", "symptoms", "diseases", "diagnoses", "surgeries", "tests"]:
+                    v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
+                    for _ in v:
+                        if _.strip():
+                            all_texts_and_types.append((_.strip(), k))
 
-            if entities:
-                current_segment["ai_preds"] = entities
-            else:
-                current_segment["ai_preds"] = None
+                text_to_codes = {}
 
-            s3.upload_to_s3(file_path.replace("wav", "json"), current_segment, is_json=True)
-            data = {
-                "es_id": f"{conversation_id}_SOAP",
-                "chunk_no": chunk_no,
-                "file_path": file_path,
-                "api_path": "asr",
-                "api_type": "asr",
-                "req_type": "encounter",
-                "executor_name": "SOAP_EXECUTOR",
-                "state": "Analytics",
-                "retry_count": retry_count,
-                "uid": None,
-                "request_id": conversation_id,
-                "care_req_id": conversation_id,
-                "encounter_id": None,
-                "provider_id": None,
-                "review_provider_id": None,
-                "completed": False,
-                "exec_duration": 0.0,
-                "start_time": str(start_time),
-                "end_time": str(datetime.utcnow()),
-            }
-            producer.publish_executor_message(data)
+                if all_texts_and_types:
+                    try:
+                        codes = \
+                            requests.post(heconstants.AI_SERVER + "/code_search/infer",
+                                          json=all_texts_and_types).json()[
+                                'prediction']
+                    except:
+                        codes = [{"name": _, "code": None} for _ in all_texts_and_types]
+
+                    for (text, _type), code in zip(all_texts_and_types, codes):
+                        text_to_codes[text] = {"name": code["name"], "code": code["code"], "score": code.get("score")}
+
+                for k in ["medications", "symptoms", "diseases", "diagnoses", "surgeries", "tests"]:
+                    v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
+                    v = [
+                        {
+                            "text": _.strip(),
+                            "code": text_to_codes.get(_.strip(), {}).get("code", None),
+                            "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
+                            "code_type": "",
+                            "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
+                        }
+                        for _ in v
+                        if _.strip()
+                    ]
+                    entities["entities"][k] = v
+
+                # if entities:
+                #     current_segment["ai_preds"] = entities
+                # else:
+                #     current_segment["ai_preds"] = None
+
+                s3.upload_to_s3(f"{conversation_id}/ai_preds.json", entities, is_json=True)
+                data = {
+                    "es_id": f"{conversation_id}_SOAP",
+                    "chunk_no": chunk_no,
+                    "file_path": file_path,
+                    "api_path": "asr",
+                    "api_type": "asr",
+                    "req_type": "encounter",
+                    "executor_name": "SOAP_EXECUTOR",
+                    "state": "Analytics",
+                    "retry_count": retry_count,
+                    "uid": None,
+                    "request_id": conversation_id,
+                    "care_req_id": conversation_id,
+                    "encounter_id": None,
+                    "provider_id": None,
+                    "review_provider_id": None,
+                    "completed": False,
+                    "exec_duration": 0.0,
+                    "start_time": str(start_time),
+                    "end_time": str(datetime.utcnow()),
+                }
+                producer.publish_executor_message(data)
 
         except Exception as exc:
             msg = "Failed to get AI PREDICTION :: {}".format(exc)
