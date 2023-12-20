@@ -73,10 +73,45 @@ class aiPreds:
                 for conversation_data in conversation_datas:
                     merged_segments += conversation_data["segments"]
 
+            entities = {
+                "age": {"text": None, "value": None, "unit": None},
+                "gender": {"text": None, "value": None, "unit": None},
+                "height": {"text": None, "value": None, "unit": None},
+                "weight": {"text": None, "value": None, "unit": None},
+                "bmi": {"text": None, "value": None, "unit": None},
+                "ethnicity": {"text": None, "value": None, "unit": None},
+                "insurance": {"text": None, "value": None, "unit": None},
+                "physicalActivityExercise": {"text": None, "value": None, "unit": None},
+                "bloodPressure": {"text": None, "value": None, "unit": None},
+                "pulse": {"text": None, "value": None, "unit": None},
+                "respiratoryRate": {"text": None, "value": None, "unit": None},
+                "bodyTemperature": {"text": None, "value": None, "unit": None},
+                "substanceAbuse": {"text": None, "value": None, "unit": None},
+                "entities": {
+                    "medications": [],
+                    "symptoms": [],
+                    "diseases": [],
+                    "diagnoses": [],
+                    "surgeries": [],
+                    "tests": [],
+                },
+                "summaries": {
+                    "subjectiveClinicalSummary": [],
+                    "objectiveClinicalSummary": [],
+                    "clinicalAssessment": [],
+                    "carePlanSuggested": [],
+                },
+            }
+
+            ai_preds_file_path = f"{conversation_id}/ai_preds.json"
+            if s3.check_file_exists(ai_preds_file_path):
+                entities = s3.get_json_file(ai_preds_file_path)
+
             # current_segment = s3.get_json_file(file_path.replace("wav", "json"))
             # segments = current_segment.get("segments")
             # if segments:
             #     text = "\n".join([seg["text"] for seg in segments])
+
             if merged_segments:
                 text = "\n".join([_["text"] for _ in merged_segments])
 
@@ -84,35 +119,6 @@ class aiPreds:
                     text, heconstants.faster_clinical_info_extraction_functions, min_length=5
                 )
                 extracted_info = self.clean_pred(extracted_info)
-                entities = {
-                    "age": {"text": None, "value": None, "unit": None},
-                    "gender": {"text": None, "value": None, "unit": None},
-                    "height": {"text": None, "value": None, "unit": None},
-                    "weight": {"text": None, "value": None, "unit": None},
-                    "bmi": {"text": None, "value": None, "unit": None},
-                    "ethnicity": {"text": None, "value": None, "unit": None},
-                    "insurance": {"text": None, "value": None, "unit": None},
-                    "physicalActivityExercise": {"text": None, "value": None, "unit": None},
-                    "bloodPressure": {"text": None, "value": None, "unit": None},
-                    "pulse": {"text": None, "value": None, "unit": None},
-                    "respiratoryRate": {"text": None, "value": None, "unit": None},
-                    "bodyTemperature": {"text": None, "value": None, "unit": None},
-                    "substanceAbuse": {"text": None, "value": None, "unit": None},
-                    "entities": {
-                        "medications": [],
-                        "symptoms": [],
-                        "diseases": [],
-                        "diagnoses": [],
-                        "surgeries": [],
-                        "tests": [],
-                    },
-                    "summaries": {
-                        "subjectiveClinicalSummary": [],
-                        "objectiveClinicalSummary": [],
-                        "clinicalAssessment": [],
-                        "carePlanSuggested": [],
-                    },
-                }
 
                 for _ in extracted_info.get("details", []):
                     if _["name"] in entities:
@@ -135,8 +141,9 @@ class aiPreds:
                 if all_texts_and_types:
                     try:
                         codes = \
-                        requests.post(heconstants.AI_SERVER + "/code_search/infer", json=all_texts_and_types).json()[
-                            'prediction']
+                            requests.post(heconstants.AI_SERVER + "/code_search/infer",
+                                          json=all_texts_and_types).json()[
+                                'prediction']
                     except:
                         codes = [{"name": _, "code": None} for _ in all_texts_and_types]
 

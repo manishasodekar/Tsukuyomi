@@ -23,43 +23,42 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
         # else:
         #     logger.info("Ai preds and transcription being fetched")
 
+        merged_segments = []
+        merged_ai_preds = {
+            "age": {"text": None, "value": None, "unit": None},
+            "gender": {"text": None, "value": None, "unit": None},
+            "height": {"text": None, "value": None, "unit": None},
+            "weight": {"text": None, "value": None, "unit": None},
+            "bmi": {"text": None, "value": None, "unit": None},
+            "ethnicity": {"text": None, "value": None, "unit": None},
+            "insurance": {"text": None, "value": None, "unit": None},
+            "physicalActivityExercise": {"text": None, "value": None, "unit": None},
+            "bloodPressure": {"text": None, "value": None, "unit": None},
+            "pulse": {"text": None, "value": None, "unit": None},
+            "respiratoryRate": {"text": None, "value": None, "unit": None},
+            "bodyTemperature": {"text": None, "value": None, "unit": None},
+            "substanceAbuse": {"text": None, "value": None, "unit": None},
+            "entities": {
+                "medications": [],
+                "symptoms": [],
+                "diseases": [],
+                "diagnoses": [],
+                "surgeries": [],
+                "tests": [],
+            },
+            "summaries": {
+                "subjectiveClinicalSummary": [],
+                "objectiveClinicalSummary": [],
+                "clinicalAssessment": [],
+                "carePlanSuggested": [],
+            },
+        }
         response_json = {}
         ai_preds_file_path = f"{conversation_id}/ai_preds.json"
+
         conversation_datas = s3.get_files_matching_pattern(
             pattern=f"{conversation_id}/{conversation_id}_*json")
-
         if conversation_datas:
-            merged_segments = []
-            merged_ai_preds = {
-                "age": {"text": None, "value": None, "unit": None},
-                "gender": {"text": None, "value": None, "unit": None},
-                "height": {"text": None, "value": None, "unit": None},
-                "weight": {"text": None, "value": None, "unit": None},
-                "bmi": {"text": None, "value": None, "unit": None},
-                "ethnicity": {"text": None, "value": None, "unit": None},
-                "insurance": {"text": None, "value": None, "unit": None},
-                "physicalActivityExercise": {"text": None, "value": None, "unit": None},
-                "bloodPressure": {"text": None, "value": None, "unit": None},
-                "pulse": {"text": None, "value": None, "unit": None},
-                "respiratoryRate": {"text": None, "value": None, "unit": None},
-                "bodyTemperature": {"text": None, "value": None, "unit": None},
-                "substanceAbuse": {"text": None, "value": None, "unit": None},
-                "entities": {
-                    "medications": [],
-                    "symptoms": [],
-                    "diseases": [],
-                    "diagnoses": [],
-                    "surgeries": [],
-                    "tests": [],
-                },
-                "summaries": {
-                    "subjectiveClinicalSummary": [],
-                    "objectiveClinicalSummary": [],
-                    "clinicalAssessment": [],
-                    "carePlanSuggested": [],
-                },
-            }
-
             audio_metas = []
             for conversation_data in conversation_datas:
                 merged_segments += conversation_data["segments"]
