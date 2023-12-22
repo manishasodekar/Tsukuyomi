@@ -5,6 +5,7 @@ from gevent import monkey
 monkey.patch_all()
 import os
 import falcon
+import traceback
 import logging
 from utils.s3_operation import S3SERVICE
 from utils import heconstants
@@ -134,9 +135,11 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
                 merged_ai_preds = s3.get_json_file(ai_preds_file_path)
                 for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary", "clinicalAssessment",
                                      "carePlanSuggested"]:
-                    summary_content = s3.get_json_file(s3_filename=f"{conversation_id}/{summary_type}.json")
-                    if summary_content:
-                        merged_ai_preds["summaries"][summary_type] = summary_content
+                    summary_file = f"{conversation_id}/{summary_type}.json"
+                    if s3.check_file_exists(summary_file):
+                        summary_content = s3.get_json_file(s3_filename=summary_file)
+                        if summary_content:
+                            merged_ai_preds["summaries"][summary_type] = summary_content
 
             response_json["ai_preds"] = merged_ai_preds
             response_json["meta"] = audio_metas
@@ -148,8 +151,10 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
         return {"success": False,
                 "text": "Transcription not found"}
 
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while merging ai preds  {e}")
+    except Exception as exc:
+        msg = "Failed to merge ai preds :: {}".format(exc)
+        trace = traceback.format_exc()
+        logger.error(msg, trace)
 
 
 class History(object):
