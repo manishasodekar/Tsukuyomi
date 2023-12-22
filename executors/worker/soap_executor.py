@@ -345,9 +345,6 @@ class soap:
 
                 s3.upload_to_s3(f"{conversation_id}/clinicalAssessment.json", data.get("clinicalAssessment"),
                                 is_json=True)
-            logger.info(f"clinicalAssessment:: {clinical_assessment_summary}")
-
-
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating clinicalAssessment ::  {e}")
 

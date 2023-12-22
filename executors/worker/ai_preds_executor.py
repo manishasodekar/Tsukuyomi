@@ -50,15 +50,42 @@ class aiPreds:
                 ):
                     del clinical_information[key]
 
-            for detail in list(clinical_information.get("details", [])):
-                if isinstance(detail["value"], str) and any(
-                        rs.lower() in detail["value"].lower() for rs in remove_strings
-                ):
-                    clinical_information["details"].remove(detail)
+            details = clinical_information.get("details", {})
+            if details:
+                keys_to_remove = [k for k, v in details.items() if
+                                  isinstance(v, str) and any(rs.lower() in v.lower() for rs in remove_strings)]
+
+                for k in keys_to_remove:
+                    del details[k]
+
+                clinical_information["details"] = details
 
             return clinical_information
-        except Exception as e:
-            logger.error(f"An error occurred clean_pred: {e}")
+        except Exception as exc:
+            msg = "Failed to get clean_pred :: {}".format(exc)
+            trace = traceback.format_exc()
+            logger.error(msg, trace)
+
+    def clean_null_entries(self, entities):
+        # List of keys to delete from the main dictionary
+        keys_to_delete = []
+
+        for key, value in entities.items():
+            # Check if the value is a dictionary and has a 'text' key
+            if isinstance(value, dict) and "text" in value:
+                if value["text"] is None:
+                    keys_to_delete.append(key)
+            # Check if the value is an empty list in the 'entities' sub-dictionary
+            elif key == "entities":
+                empty_keys = [k for k, v in value.items() if v == []]
+                for empty_key in empty_keys:
+                    del value[empty_key]
+
+        # Delete the keys from the main dictionary
+        for key in keys_to_delete:
+            del entities[key]
+
+        return entities
 
     def execute_function(self, message, start_time):
         try:
@@ -67,6 +94,7 @@ class aiPreds:
             chunk_no = message.get("chunk_no")
             retry_count = message.get("retry_count")
             merged_segments = []
+
             conversation_datas = s3.get_files_matching_pattern(
                 pattern=f"{conversation_id}/{conversation_id}_*json")
             if conversation_datas:
@@ -107,33 +135,32 @@ class aiPreds:
             if s3.check_file_exists(ai_preds_file_path):
                 entities = s3.get_json_file(ai_preds_file_path)
 
-            # current_segment = s3.get_json_file(file_path.replace("wav", "json"))
-            # segments = current_segment.get("segments")
-            # if segments:
-            #     text = "\n".join([seg["text"] for seg in segments])
-
             if merged_segments:
-                text = "\n".join([_["text"] for _ in merged_segments])
-
-                extracted_info = self.get_preds_from_open_ai(
-                    text, heconstants.faster_clinical_info_extraction_functions, min_length=5
-                )
+                text = " ".join([_["text"] for _ in merged_segments])
+                extracted_info = self.get_preds_from_open_ai(text)
                 extracted_info = self.clean_pred(extracted_info)
 
-                for _ in extracted_info.get("details", []):
-                    if _["name"] in entities:
-                        if entities[_["name"]]["text"] is None:
-                            entities[_["name"]]["text"] = _["value"]
-                        else:
-                            entities[_["name"]]["text"] += ", " + _["value"]
+                details = extracted_info.get("details", {})
+                if details:
+                    for k, v in details.items():
+                        if k in entities:
+                            if entities[k]["text"] is None:
+                                entities[k]["text"] = v
+                            # else:
+                            #     entities[k]["text"] += ", " + v
 
-                        entities[_["name"]]["value"] = entities[_["name"]]["text"]
+                            entities[k]["value"] = entities[k]["text"]
 
                 all_texts_and_types = []
                 for k in ["medications", "symptoms", "diseases", "diagnoses", "surgeries", "tests"]:
-                    v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
-                    for _ in v:
-                        if _.strip():
+                    if isinstance(extracted_info.get(k), str):
+                        v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
+                        for _ in v:
+                            if _.strip():
+                                all_texts_and_types.append((_.strip(), k))
+                    elif isinstance(extracted_info.get(k), list):
+                        v = extracted_info.get(k, "")
+                        for _ in v:
                             all_texts_and_types.append((_.strip(), k))
 
                 text_to_codes = {}
@@ -151,25 +178,42 @@ class aiPreds:
                         text_to_codes[text] = {"name": code["name"], "code": code["code"], "score": code.get("score")}
 
                 for k in ["medications", "symptoms", "diseases", "diagnoses", "surgeries", "tests"]:
-                    v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
-                    v = [
-                        {
-                            "text": _.strip(),
-                            "code": text_to_codes.get(_.strip(), {}).get("code", None),
-                            "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
-                            "code_type": "",
-                            "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
-                        }
-                        for _ in v
-                        if _.strip()
-                    ]
-                    entities["entities"][k] = v
+                    if isinstance(extracted_info.get(k), str):
+                        v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
+                        v = [
+                            {
+                                "text": _.strip(),
+                                "code": text_to_codes.get(_.strip(), {}).get("code", None),
+                                "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
+                                "code_type": "",
+                                "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
+                            }
+                            for _ in v
+                            if _.strip()
+                        ]
+                        entities["entities"][k] = v
+                    elif isinstance(extracted_info.get(k), list):
+                        v = extracted_info.get(k, "")
+                        val = [
+                            {
+                                "text": _.strip(),
+                                "code": text_to_codes.get(_.strip(), {}).get("code", None),
+                                "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
+                                "code_type": "",
+                                "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
+                            }
+                            for _ in v
+                            if _.strip()
+                        ]
+                        entities["entities"][k] = val
 
                 # if entities:
                 #     current_segment["ai_preds"] = entities
                 # else:
                 #     current_segment["ai_preds"] = None
 
+                entities = self.clean_null_entries(entities)
+                print("entities ::", entities)
                 s3.upload_to_s3(f"{conversation_id}/ai_preds.json", entities, is_json=True)
                 data = {
                     "es_id": f"{conversation_id}_SOAP",
@@ -222,6 +266,58 @@ class aiPreds:
                 }
                 producer.publish_executor_message(data)
 
+    def string_to_dict(self, input_string):
+        # Initialize an empty dictionary
+        result = {}
+        details = {}
+
+        # Define the keys to be nested inside 'details'
+        detail_keys = ["age_years", "gender", "height_cm", "weight_kg", "ethnicity",
+                       "substanceAbuse", "bloodPressure", "pulseRate", "respiratoryRate",
+                       "bodyTemperature_fahrenheit"]
+
+        # Split the input string into lines
+        lines = input_string.split(',\n')
+
+        # Process each line
+        for line in lines:
+            # Split the line into key and value
+            key, value = line.split(': ')
+
+            # Clean up the key and value strings
+            key = key.strip().replace('"', '')
+
+            # Handle multiple values and 'not found' cases
+            # if value.strip() == "not found":
+            #     value = None
+            if ', ' in value:
+                value = [item.strip().replace('"', '') for item in value.replace(" and ", " , ").split(', ')]
+
+            # Check if the key should be nested inside 'details'
+            if key in detail_keys:
+                if key == "height_cm":
+                    details["height"] = value
+                elif key == "age_years":
+                    details["age"] = value
+                elif key == "weight_kg":
+                    details["weight"] = value
+                elif key == "bodyTemperature_fahrenheit":
+                    details["bodyTemperature"] = value
+                elif key == "pulseRate":
+                    details["pulse"] = value
+                else:
+                    details[key] = value
+            else:
+                if key == "orders":
+                    result["tests"] = value
+                else:
+                    result[key] = value
+
+        # Add the 'details' dictionary to the result
+        result['details'] = details
+
+        return result
+
     def get_preds_from_open_ai(self,
                                transcript_text,
                                function_list=heconstants.faster_clinical_info_extraction_functions,
@@ -232,6 +328,25 @@ class aiPreds:
             if not transcript_text or len(transcript_text) <= min_length:
                 raise Exception("Transcript text is too short")
 
+            template = """
+            "medications": <text>,
+            "symptoms": <text>,
+            "diseases": <text>,
+            "diagnoses": <text>,
+            "surgeries": <text>,
+            "orders": <text>,
+            "age_years": <text>,
+            "gender": <text>,
+            "height_cm": <text>,
+            "weight_kg": <text>,
+            "ethnicity": <text>,
+            "substanceAbuse": <text>,
+            "bloodPressure": <text>,
+            "pulseRate": <text>,
+            "respiratoryRate": <text>,
+            "bodyTemperature_fahrenheit": <text>
+            """
+
             messages = [
                 {
                     "role": "system",
@@ -241,6 +356,10 @@ class aiPreds:
                     No extra information or hypothesis not present in the given text should be added. Separate items with , wherever needed.
                     All the text returned should be present in the given TEXT. no new text should be returned.""",
                 },
+                {
+                    "role": "system",
+                    "content": f"Use given template to return the response : {template}",
+                },
                 {"role": "user", "content": f"TEXT: {transcript_text}"},
             ]
 
@@ -249,16 +368,18 @@ class aiPreds:
                     response = openai.ChatCompletion.create(
                         model=model_name,
                         messages=messages,
-                        functions=function_list,
-                        function_call={"name": "ClinicalInformation"},
+                        # functions=function_list,
+                        # function_call={"name": "ClinicalInformation"},
                         temperature=1,
                     )
 
-                    extracted_info = json.loads(
-                        response.choices[0]["message"]["function_call"]["arguments"]
-                    )
-                    logger.info(f"extracted_info :: {extracted_info}")
-                    return extracted_info
+                    extracted_info = response.choices[0]["message"]["content"]
+                    converted_info = self.string_to_dict(extracted_info)
+                    print(converted_info)
+                    # extracted_info = json.loads(
+                    #     response.choices[0]["message"]["function_call"]["arguments"]
+                    # )
+                    return converted_info
 
                 except Exception as ex:
                     logger.error(ex)
@@ -266,3 +387,32 @@ class aiPreds:
         except Exception as exc:
             msg = "Failed to get OPEN AI PREDICTION :: {}".format(exc)
             logger.error(msg)
+
+
+if __name__ == "__main__":
+    ai_pred = aiPreds()
+    stream_key = "test_new39"
+    start_time = datetime.utcnow()
+    message = {
+        "es_id": f"{stream_key}_AI_PRED",
+        "chunk_no": 2,
+        "file_path": f"{stream_key}/{stream_key}_chunk2.wav",
+        "api_path": "asr",
+        "api_type": "asr",
+        "req_type": "encounter",
+        "executor_name": "AI_PRED",
+        "state": "AiPred",
+        "retry_count": None,
+        "uid": None,
+        "request_id": stream_key,
+        "care_req_id": stream_key,
+        "encounter_id": None,
+        "provider_id": None,
+        "review_provider_id": None,
+        "completed": False,
+        "exec_duration": 0.0,
+        "start_time": str(start_time),
+        "end_time": str(datetime.utcnow()),
+    }
+    ai_pred.execute_function(message=message, start_time=datetime.utcnow())
+    # ai_pred.get_preds_from_open_ai(transcript_text)
