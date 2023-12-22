@@ -7,6 +7,8 @@ from typing import Optional
 import av
 import time
 import json
+import torch
+import torchaudio
 import wave
 import boto3
 import requests
@@ -23,6 +25,9 @@ s16_resampler = av.AudioResampler(format="s16", rate="16000", layout="mono")
 s3_client = boto3.client('s3', aws_access_key_id=heconstants.AWS_ACCESS_KEY,
                          aws_secret_access_key=heconstants.AWS_SECRET_ACCESS_KEY)
 
+# Load Silero VAD
+model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
+(get_speech_ts, _, read_audio, *_) = utils
 
 class S3SERVICE:
     def __init__(self):
@@ -285,6 +290,16 @@ def yield_chunks_from_rtmp_stream(stream_key, user_type, stream_url=heconstants.
                   source_type="backend")
         return None
 
+def is_speech_present(byte_data, model, get_speech_ts):
+    try:
+        # Convert byte data to tensor
+        # tensor = read_audio(io.BytesIO(audio_data))
+        tensor = torch.frombuffer(byte_data, dtype=torch.int16).float() / 32768.0
+        tensor = tensor.unsqueeze(0)  # Add channel dimension
+        speech_timestamps = get_speech_ts(tensor, model)
+        return len(speech_timestamps) > 0
+    except Exception as e:
+        logger.error(f"VAD error :: {e}")
 
 def save_rtmp_loop(
         stream_key,
@@ -321,6 +336,7 @@ def save_rtmp_loop(
                 WAV_F.setframerate(16000)
 
                 frames_written = 0
+                audio_data = b''  # Buffer to hold audio data for VAD
 
                 for byte_data in rtmp_iterator:
                     if not started:
@@ -345,15 +361,17 @@ def save_rtmp_loop(
 
                     # reading chunks for 2 sec
                     if current_time - chunk_start_time >= heconstants.chunk_duration:
-                        break
+                        # If there's no speech in the current byte_data, break
+                        if not is_speech_present(byte_data, model, get_speech_ts):
+                            break
 
                 WAV_F.close()
                 key = f"{stream_key}/{stream_key}_chunk{chunk_count}.wav"
                 wav_buffer.name = key.split("/")[1]
                 wav_buffer.seek(0)  # Reset buffer pointer to the beginning
-                logger.info(f"sending chunks for transcription :: {key}")
+                # logger.info(f"sending chunks for transcription :: {key}")
                 transcription_result = requests.post(
-                    heconstants.AI_SERVER + "/transcribe/infer",
+                    heconstants.AI_SERVER + "/infer",
                     files={"f1": wav_buffer},
                 ).json()["prediction"][0]
                 chunk_count += 1
