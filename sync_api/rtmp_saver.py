@@ -323,7 +323,7 @@ def save_rtmp_loop(
         if rtmp_iterator is not None:
             started = False
             chunk_count = 1
-            frames_per_chunk = 16000 * heconstants.chunk_duration  # N seconds of frames at 16000 Hz
+            frames_per_chunk = 16000 * heconstants.quick_loop_chunk_duration  # N seconds of frames at 16000 Hz
             bytes_per_frame = 2  # Assuming 16-bit audio (2 bytes per frame)
 
             while True:
@@ -355,12 +355,12 @@ def save_rtmp_loop(
                     current_time = time.time()
 
                     # reading chunks for 2 sec + frames written should be more than 2 sec
-                    # if current_time - chunk_start_time >= heconstants.chunk_duration and \
+                    # if current_time - chunk_start_time >= heconstants.quick_loop_chunk_duration and \
                     #         frames_written >= frames_per_chunk:
                     #     break
 
                     # reading chunks for 2 sec
-                    if current_time - chunk_start_time >= heconstants.chunk_duration:
+                    if current_time - chunk_start_time >= heconstants.quick_loop_chunk_duration:
                         # If there's no speech in the current byte_data, break
                         if not is_speech_present(byte_data, model, get_speech_ts):
                             break
@@ -413,7 +413,7 @@ def save_rtmp_loop(
                     websocket.close()
                     break
 
-                if current_time - chunk_start_time < heconstants.chunk_duration:
+                if current_time - chunk_start_time < heconstants.quick_loop_chunk_duration:
                     # Break the while loop if the last chunk duration is less than 5 seconds
                     break
         else:
