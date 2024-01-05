@@ -21,6 +21,7 @@ class aiPreds:
                    clinical_information,
                    remove_strings=[
                        "not found",
+                       "no information found"
                        "information not provided",
                        "unknown",
                        "n/a",
@@ -34,6 +35,7 @@ class aiPreds:
                        "unidentified",
                        "not specified",
                        "not mentioned",
+                       "none mentioned",
                        "not detected",
                        "insufficient data",
                        "no mention of",
@@ -288,10 +290,10 @@ class aiPreds:
             key = key.strip().replace('"', '')
 
             # Handle multiple values and 'not found' cases
-            # if value.strip() == "not found":
-            #     value = None
             if ', ' in value:
                 value = [item.strip().replace('"', '') for item in value.replace(" and ", " , ").split(', ')]
+            else:
+                value = value.strip().replace('"', '')
 
             # Check if the key should be nested inside 'details'
             if key in detail_keys:
@@ -375,7 +377,7 @@ class aiPreds:
 
                     extracted_info = response.choices[0]["message"]["content"]
                     converted_info = self.string_to_dict(extracted_info)
-                    print(converted_info)
+                    logger.info(f"extracted_info :: {converted_info}")
                     # extracted_info = json.loads(
                     #     response.choices[0]["message"]["function_call"]["arguments"]
                     # )
@@ -389,30 +391,30 @@ class aiPreds:
             logger.error(msg)
 
 
-if __name__ == "__main__":
-    ai_pred = aiPreds()
-    stream_key = "test_new39"
-    start_time = datetime.utcnow()
-    message = {
-        "es_id": f"{stream_key}_AI_PRED",
-        "chunk_no": 2,
-        "file_path": f"{stream_key}/{stream_key}_chunk2.wav",
-        "api_path": "asr",
-        "api_type": "asr",
-        "req_type": "encounter",
-        "executor_name": "AI_PRED",
-        "state": "AiPred",
-        "retry_count": None,
-        "uid": None,
-        "request_id": stream_key,
-        "care_req_id": stream_key,
-        "encounter_id": None,
-        "provider_id": None,
-        "review_provider_id": None,
-        "completed": False,
-        "exec_duration": 0.0,
-        "start_time": str(start_time),
-        "end_time": str(datetime.utcnow()),
-    }
-    ai_pred.execute_function(message=message, start_time=datetime.utcnow())
+# if __name__ == "__main__":
+    # ai_pred = aiPreds()
+    # stream_key = "test_new39"
+    # start_time = datetime.utcnow()
+    # message = {
+    #     "es_id": f"{stream_key}_AI_PRED",
+    #     "chunk_no": 2,
+    #     "file_path": f"{stream_key}/{stream_key}_chunk2.wav",
+    #     "api_path": "asr",
+    #     "api_type": "asr",
+    #     "req_type": "encounter",
+    #     "executor_name": "AI_PRED",
+    #     "state": "AiPred",
+    #     "retry_count": None,
+    #     "uid": None,
+    #     "request_id": stream_key,
+    #     "care_req_id": stream_key,
+    #     "encounter_id": None,
+    #     "provider_id": None,
+    #     "review_provider_id": None,
+    #     "completed": False,
+    #     "exec_duration": 0.0,
+    #     "start_time": str(start_time),
+    #     "end_time": str(datetime.utcnow()),
+    # }
+    # ai_pred.execute_function(message=message, start_time=datetime.utcnow())
     # ai_pred.get_preds_from_open_ai(transcript_text)
