@@ -198,12 +198,8 @@ def websocket_handler(env, start_response):
                     transcript = s3.get_json_file(transcript_key)
                     ws.send(json.dumps(
                         {
-                            "transcript": transcript.get("transcript", ""),
-                            "success": True,
-                            "uid": uid,
-                            "segments": [],
-                            "ai_preds": {},
-                            "triage_ai_suggestion": triage_ai_suggestion,
+                            "cc": transcript.get("transcript", ""),
+                            "success": True
                         }
                     ))
             except:
@@ -262,7 +258,12 @@ def websocket_handler(env, start_response):
                             try:
                                 logger.info(f"SENDING AI PREDS TO WS :: {ws}")
                                 latest_ai_preds_resp["uid"] = uid
+                                segments = latest_ai_preds_resp.get("segments")
+                                if segments:
+                                    latest_ai_preds_resp["transcript"] = " ".join(item["text"] for item in segments)
                                 ws.send(json.dumps(latest_ai_preds_resp))
+                                merged_json_key = f"{connection_id}/{connection_id}_merged.json"
+                                s3.upload_to_s3(merged_json_key, latest_ai_preds_resp, is_json=True)
                                 # with Timeout(2, False):  # Set the timeout to 2 seconds
                                 #     message = ws.receive()
                                 #     logger.info(f"ack :: {message}")

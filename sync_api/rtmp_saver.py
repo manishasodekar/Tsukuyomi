@@ -380,12 +380,11 @@ def save_rtmp_loop(
                     text = segments[0].get("text")
                     if text:
                         if transcript != "":
-                            transcript += "\n" + text
+                            transcript += " " + text
                         else:
                             transcript = text
                 try:
-                    websocket.send(json.dumps({"transcript": transcript, "segments": [],
-                                               "ai_preds": {}, "success": True}))
+                    websocket.send(json.dumps({"cc": transcript, "success": True}))
                     transcript_key = f"{stream_key}/transcript.json"
                     transcript_data = {"transcript": transcript}
                     s3.upload_to_s3(transcript_key, transcript_data, is_json=True)
