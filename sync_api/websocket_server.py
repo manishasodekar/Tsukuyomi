@@ -238,18 +238,19 @@ def websocket_handler(env, start_response):
                     ws.close()
                 try:
                     latest_ai_preds_resp = None
-                    if time.time() - last_preds_sent_at >= 15:
+                    if time.time() - last_preds_sent_at >= 10:
                         ai_preds_resp = requests.get(
                             heconstants.SYNC_SERVER + f"/history?conversation_id={connection_id}"
                         )
                         if ai_preds_resp.status_code == 200:
                             latest_ai_preds_resp = json.loads(ai_preds_resp.text)
                         last_preds_sent_at = time.time()
-                    # else:
-                    #     ai_preds_resp = requests.get(
-                    #         aiserver + f"/history?conversation_id={connection_id}&only_transcribe=True"
-                    #     )
-                    #     latest_ai_preds_resp = json.loads(ai_preds_resp.text)
+                    else:
+                        ai_preds_resp = requests.get(
+                            heconstants.SYNC_SERVER + f"/history?conversation_id={connection_id}&only_transcribe=True"
+                        )
+                        if ai_preds_resp.status_code == 200:
+                            latest_ai_preds_resp = json.loads(ai_preds_resp.text)
 
                     if latest_ai_preds_resp:
                         text = latest_ai_preds_resp.get("text")
@@ -258,9 +259,6 @@ def websocket_handler(env, start_response):
                             try:
                                 logger.info(f"SENDING AI PREDS TO WS :: {ws}")
                                 latest_ai_preds_resp["uid"] = uid
-                                segments = latest_ai_preds_resp.get("segments")
-                                if segments:
-                                    latest_ai_preds_resp["transcript"] = " ".join(item["text"] for item in segments)
                                 ws.send(json.dumps(latest_ai_preds_resp))
                                 merged_json_key = f"{connection_id}/{connection_id}_merged.json"
                                 s3.upload_to_s3(merged_json_key, latest_ai_preds_resp, is_json=True)
