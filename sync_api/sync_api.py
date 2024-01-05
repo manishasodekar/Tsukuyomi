@@ -19,6 +19,7 @@ s3 = S3SERVICE()
 
 def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False):
     try:
+        logger.info("Ai preds and transcription being fetched")
         # if only_transcribe:
         #     logger.info("Only transcription being fetched")
         # else:
