@@ -186,6 +186,7 @@ def websocket_handler(env, start_response):
         )
 
         last_preds_sent_at = time.time()
+        last_trans_sent_at = time.time()
         last_number_of_segments = 0
         last_ack_sent_at = time.time()
 
@@ -245,12 +246,14 @@ def websocket_handler(env, start_response):
                         if ai_preds_resp.status_code == 200:
                             latest_ai_preds_resp = json.loads(ai_preds_resp.text)
                         last_preds_sent_at = time.time()
-                    else:
+
+                    elif time.time() - last_trans_sent_at >= 8:
                         ai_preds_resp = requests.get(
                             heconstants.SYNC_SERVER + f"/history?conversation_id={connection_id}&only_transcribe=True"
                         )
                         if ai_preds_resp.status_code == 200:
                             latest_ai_preds_resp = json.loads(ai_preds_resp.text)
+                        last_trans_sent_at = time.time()
 
                     if latest_ai_preds_resp:
                         text = latest_ai_preds_resp.get("text")
