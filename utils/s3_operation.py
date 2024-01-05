@@ -87,10 +87,11 @@ class S3SERVICE:
             json_data_list.sort(key=lambda x: x['chunk_no'])
             return json_data_list
         except Exception as exc:
-            self.logger.error(str(exc))
+            print(f"Error get_files_matching_pattern file: {exc}")
             return []
         except NoCredentialsError:
             print("Credentials not available")
+            return []
         except s3_client.exceptions.ClientError as e:
             print(f"An error occurred: {e}")
             return []
