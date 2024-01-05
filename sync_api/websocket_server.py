@@ -260,7 +260,7 @@ def websocket_handler(env, start_response):
                                 logger.info(f"SENDING AI PREDS TO WS :: {ws}")
                                 latest_ai_preds_resp["uid"] = uid
                                 ws.send(json.dumps(latest_ai_preds_resp))
-                                merged_json_key = f"{connection_id}/{connection_id}_merged.json"
+                                merged_json_key = f"{connection_id}/All_Preds.json"
                                 s3.upload_to_s3(merged_json_key, latest_ai_preds_resp, is_json=True)
                                 # with Timeout(2, False):  # Set the timeout to 2 seconds
                                 #     message = ws.receive()
