@@ -370,7 +370,7 @@ class aiPreds:
                         messages=messages,
                         # functions=function_list,
                         # function_call={"name": "ClinicalInformation"},
-                        temperature=1,
+                        temperature=0.6,
                     )
 
                     extracted_info = response.choices[0]["message"]["content"]

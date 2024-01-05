@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 from typing import Optional
 import nltk
 
@@ -71,12 +72,56 @@ class soap:
 
         return clinical_summary_functions
 
+    def string_to_dict(self, input_string):
+        # Splitting the string into different sections
+        sections = input_string.split("\n\n")
+        result = {}
+
+        # Function to process each sentence
+        def process_sentence(sentence):
+            sentence = sentence.strip().replace("- ", "")
+            # Add a full stop if not present
+            if not sentence.endswith('.'):
+                sentence += '.'
+            return sentence
+
+        # Processing each section
+        for section in sections:
+            lines = section.split("\n")
+            title = lines[0].strip(":").lower()  # Extracting the title (e.g., SUBJECTIVE)
+
+            # Processing sentences
+            sentences = []
+            for line in lines[1:]:
+                for sentence in line.split(" -"):
+                    if sentence:
+                        sentences.append(process_sentence(sentence))
+
+            content = " ".join(sentences)
+
+            # Mapping the title to the corresponding key in the result dictionary
+            if title == "subjective":
+                result["subjectiveSummary"] = content
+            elif title == "objective":
+                result["objectiveSummary"] = content
+            elif title == "assessment":
+                result["clinicalAssessmentSummary"] = content
+            elif title == "plan":
+                result["carePlanSummary"] = content
+
+        return result
+
     def get_clinical_summaries_from_openai(self, text, summary_type: Optional[str] = None):
         try:
             messages = [
                 {
                     "role": "system",
-                    "content": """Generate clinical summaries following their description for the following transcript""",
+                    # "content": """Generate clinical summaries following their description for the following transcript""",
+                    "content": """"Summarize the medical case in the following format: SUBJECTIVE,
+                    OBJECTIVE, ASSESSMENT, PLAN. It is important to maintain accuracy and relevance to the medical
+                    context and omit any non-medical chatter, assumptions, or speculations. Provide the asked
+                    information in a clear and concise manner, structured, you are not suppose to assume anything and
+                    dont use any hypothesis , rememeber to generate results in points.""",
                 },
                 {"role": "user", "content": f"TEXT: {text}"},
             ]
@@ -88,15 +133,20 @@ class soap:
                     response = openai.ChatCompletion.create(
                         model=model_name,
                         messages=messages,
-                        functions=heconstants.clinical_summary_functions,
-                        function_call={"name": "ClinicalSummaries"},
-                        temperature=1,
+                        # functions=heconstants.clinical_summary_functions,
+                        # function_call={"name": "ClinicalSummaries"},
+                        temperature=0.6,
                     )
 
-                    extracted_info = json.loads(
-                        response.choices[0]["message"]["function_call"]["arguments"]
-                    )
-                    return extracted_info
+                    extracted_info = response.choices[0]["message"]["content"]
+                    converted_info = self.string_to_dict(extracted_info)
+                    return converted_info
+
+                    # extracted_info = json.loads(
+                    #     response.choices[0]["message"]["function_call"]["arguments"]
+                    # )
+                    # print(extracted_info)
+                    # return extracted_info
 
                 except Exception as ex:
                     self.logger.error(f"Failed to get clinical summary from openAI :: {ex}")
@@ -262,6 +312,8 @@ class soap:
                 data = {"subjectiveClinicalSummary": subjective_summary}
                 s3.upload_to_s3(f"{conversation_id}/subjectiveClinicalSummary.json",
                                 data.get("subjectiveClinicalSummary"), is_json=True)
+
+            print(data)
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating subjectiveClinicalSummary ::  {e}")
 
@@ -304,6 +356,7 @@ class soap:
 
                 s3.upload_to_s3(f"{conversation_id}/objectiveClinicalSummary.json",
                                 data.get("objectiveClinicalSummary"), is_json=True)
+            print(data)
 
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating  objectiveClinicalSummary ::  {e}")
@@ -345,6 +398,8 @@ class soap:
 
                 s3.upload_to_s3(f"{conversation_id}/clinicalAssessment.json", data.get("clinicalAssessment"),
                                 is_json=True)
+            print(data)
+
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating clinicalAssessment ::  {e}")
 
@@ -381,5 +436,40 @@ class soap:
                 }
                 s3.upload_to_s3(f"{conversation_id}/carePlanSuggested.json", data.get("carePlanSuggested"),
                                 is_json=True)
+            print(data)
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating carePlanSuggested ::  {e}")
+
+
+# if __name__ == "__main__":
+#     soap_exe = soap()
+#     stream_key = "test_new39"
+#     start_time = datetime.utcnow()
+#     message = {
+#         "es_id": f"{stream_key}_SOAP",
+#         "chunk_no": 42,
+#         "file_path": f"{stream_key}/{stream_key}_chunk42.wav",
+#         "api_path": "asr",
+#         "api_type": "asr",
+#         "req_type": "encounter",
+#         "executor_name": "SOAP_EXECUTOR",
+#         "state": "Analytics",
+#         "retry_count": None,
+#         "uid": None,
+#         "request_id": stream_key,
+#         "care_req_id": stream_key,
+#         "encounter_id": None,
+#         "provider_id": None,
+#         "review_provider_id": None,
+#         "completed": False,
+#         "exec_duration": 0.0,
+#         "start_time": str(start_time),
+#         "end_time": str(datetime.utcnow()),
+#     }
+#     segments, last_ai_preds = soap_exe.get_merge_ai_preds(conversation_id=stream_key)
+#     soap_exe.get_subjective_summary(message, start_time, segments, last_ai_preds)
+#     soap_exe.get_objective_summary(message, start_time, segments, last_ai_preds)
+#     # soap_exe.get_clinical_assessment_summary(message, start_time, segments, last_ai_preds)
+#     # soap_exe.get_care_plan_summary(message, start_time, segments, last_ai_preds)
+#     # soap_exe.execute_function(message=message, start_time=datetime.utcnow())
+#     # soap_exe.get_clinical_summaries_from_openai(transcript_text)
