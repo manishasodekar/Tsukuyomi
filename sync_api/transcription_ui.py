@@ -6,7 +6,7 @@ from utils.s3_operation import S3SERVICE
 
 def main():
     # Define the API endpoint URL
-    api_url = heconstants.SYNC_SERVER + "/" + heconstants.env + "/history"
+    api_url = heconstants.SYNC_SERVER + "/history"
 
     s3 = S3SERVICE()
 
@@ -19,7 +19,7 @@ def main():
             return []
 
     # Streamlit UI
-    st.title("File Explorer")
+    st.title("Transcripts")
 
     # Fetch filenames from the API
     filenames = fetch_filenames()

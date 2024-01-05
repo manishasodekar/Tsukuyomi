@@ -140,8 +140,8 @@ def websocket_handler(env, start_response):
                       source_type="backend")
 
             triage_ai_suggestion = message.get("triage_ai_suggestion", {})
-            if triage_ai_suggestion:
-                pass
+            if not triage_ai_suggestion:
+                triage_ai_suggestion = {}
             logger.info(f"ws :: {ws}")
             logger.info(f"Intializing trascription, coding, etc. :: {connection_id}")
 
@@ -164,13 +164,13 @@ def websocket_handler(env, start_response):
                 connection_id, user_type, ws
             )
 
-        try:
-            key = f"{connection_id}/{connection_id}.json"
-            triage_ai_suggestion = s3.get_json_file(key)
-            if triage_ai_suggestion is None:
-                triage_ai_suggestion = {}
-        except:
-            triage_ai_suggestion = {}
+        # try:
+        #     key = f"{connection_id}/{connection_id}.json"
+        #     triage_ai_suggestion = s3.get_json_file(key)
+        #     if triage_ai_suggestion is None:
+        #         triage_ai_suggestion = {}
+        # except:
+        #     triage_ai_suggestion = {}
 
         logger.info(f"SENDING EMPTY AI PREDS TO WS :: {ws}")
         ws.send(
@@ -261,6 +261,7 @@ def websocket_handler(env, start_response):
                         if not is_transcript_not_ready:
                             try:
                                 logger.info(f"SENDING AI PREDS TO WS :: {ws}")
+                                latest_ai_preds_resp["triage_ai_suggestion"] = triage_ai_suggestion
                                 latest_ai_preds_resp["uid"] = uid
                                 ws.send(json.dumps(latest_ai_preds_resp))
                                 merged_json_key = f"{connection_id}/All_Preds.json"
