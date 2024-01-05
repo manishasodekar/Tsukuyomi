@@ -97,6 +97,18 @@ class S3SERVICE:
             print(f"An error occurred: {e}")
             return []
 
+    def sort_dirs_by_time(self, dirs_list):
+        # Function to extract the timestamp from each directory name
+        def extract_timestamp(dir_name):
+            try:
+                return int(dir_name.split('__')[2])
+            except IndexError:
+                return 0
+
+        # Sorting the directories based on the extracted timestamp, in descending order
+        sorted_dirs = sorted(dirs_list, key=extract_timestamp, reverse=True)
+        return sorted_dirs
+
     def get_dirs_matching_pattern(self, pattern, bucket_name: Optional[str] = None):
         dirs_matching_pattern = set()
         try:
@@ -117,7 +129,8 @@ class S3SERVICE:
 
             # Convert the set of directory names to a list
             dirs_list = list(dirs_matching_pattern)
-            return dirs_list
+            sorted_dirs = self.sort_dirs_by_time(dirs_list)
+            return sorted_dirs
         except Exception as exc:
             print(f"Error get_dirs_matching_pattern: {exc}")
             return []
