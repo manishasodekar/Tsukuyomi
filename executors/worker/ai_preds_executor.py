@@ -139,7 +139,10 @@ class aiPreds:
 
             if merged_segments:
                 text = " ".join([_["text"] for _ in merged_segments])
-                extracted_info = self.get_preds_from_open_ai(text)
+                triage_ai_preds_key = f"{conversation_id}/triage_ai_preds.json"
+                preds = s3.get_json_file(triage_ai_preds_key)
+                triage_ai_preds = preds.get("ai_preds")
+                extracted_info = self.get_preds_from_open_ai(text, triage_ai_preds)
                 extracted_info = self.clean_pred(extracted_info)
 
                 details = extracted_info.get("details", {})
@@ -322,6 +325,7 @@ class aiPreds:
 
     def get_preds_from_open_ai(self,
                                transcript_text,
+                               triage_ai_preds,
                                function_list=heconstants.faster_clinical_info_extraction_functions,
                                min_length=30,
                                ):
@@ -349,21 +353,43 @@ class aiPreds:
             "bodyTemperature_fahrenheit": <text>
             """
 
-            messages = [
-                {
-                    "role": "system",
-                    "content": """ Don't make assumptions about what values to plug into functions. return not found if you can't find the information.
-                    You are acting as an expert clinical entity extractor.
-                    Extract the described information from given clinical notes or consultation transcript.
-                    No extra information or hypothesis not present in the given text should be added. Separate items with , wherever needed.
-                    All the text returned should be present in the given TEXT. no new text should be returned.""",
-                },
-                {
-                    "role": "system",
-                    "content": f"Use given template to return the response : {template}",
-                },
-                {"role": "user", "content": f"TEXT: {transcript_text}"},
-            ]
+            if triage_ai_preds or triage_ai_preds != "":
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """Don't make assumptions about what values to plug into functions. return not 
+                        found if you can't find the information. You are acting as an expert clinical entity 
+                        extractor. Extract the described information from given clinical notes, consultation 
+                        transcript or PATIENT PROVIDER CONVERSATION, including AI TRIAGE CONVERSATION. No 
+                        extra information or hypothesis not present in the given text should be added. Separate items 
+                        with , wherever needed. All the text returned should be present in the given TEXT. no new 
+                        text should be returned.""",
+                    },
+                    {
+                        "role": "system",
+                        "content": f"Use given template to return the response : {template}",
+                    },
+                    {"role": "user", "content": f"AI TRIAGE CONVERSATION:\n {triage_ai_preds} \n\nPATIENT PROVIDER "
+                                                f"CONVERSATION:\n {transcript_text}"},
+                ]
+
+            else:
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """Don't make assumptions about what values to plug into functions. return not 
+                        found if you can't find the information. You are acting as an expert clinical entity 
+                        extractor. Extract the described information from given clinical notes, consultation 
+                        transcript or PATIENT PROVIDER CONVERSATION. No extra information or hypothesis not present 
+                        in the given text should be added. Separate items with , wherever needed. All the text 
+                        returned should be present in the given TEXT. no new text should be returned.""",
+                    },
+                    {
+                        "role": "system",
+                        "content": f"Use given template to return the response : {template}",
+                    },
+                    {"role": "user", "content": f"PATIENT PROVIDER CONVERSATION:\n {transcript_text}"},
+                ]
 
             for model_name in ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]:
                 try:

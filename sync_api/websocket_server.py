@@ -140,8 +140,16 @@ def websocket_handler(env, start_response):
                       source_type="backend")
 
             triage_ai_suggestion = message.get("triage_ai_suggestion", {})
-            if not triage_ai_suggestion:
-                triage_ai_suggestion = {}
+            triage_key = f"{connection_id}/triage_ai_suggestion.json"
+            if triage_ai_suggestion:
+                s3.upload_to_s3(triage_key, triage_ai_suggestion, is_json=True)
+
+            triage_ai_preds = message.get("ai_preds", None)
+            triage_ai_preds_key = f"{connection_id}/triage_ai_preds.json"
+            if triage_ai_preds or triage_ai_preds != "":
+                triage_data = {"ai_preds": triage_ai_preds}
+                s3.upload_to_s3(triage_ai_preds_key, triage_data, is_json=True)
+
             logger.info(f"ws :: {ws}")
             logger.info(f"Intializing trascription, coding, etc. :: {connection_id}")
 
@@ -164,13 +172,6 @@ def websocket_handler(env, start_response):
                 connection_id, user_type, ws
             )
 
-        # try:
-        #     key = f"{connection_id}/{connection_id}.json"
-        #     triage_ai_suggestion = s3.get_json_file(key)
-        #     if triage_ai_suggestion is None:
-        #         triage_ai_suggestion = {}
-        # except:
-        #     triage_ai_suggestion = {}
 
         logger.info(f"SENDING EMPTY AI PREDS TO WS :: {ws}")
         ws.send(
