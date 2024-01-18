@@ -305,7 +305,7 @@ def websocket_handler(env, start_response):
             if current_time - past_time > 1800:
                 msg = "More than 30 minutes have passed since the recorded time."
                 logger.info(msg)
-                ws.send(json.dumps({"success": False, "message": msg}))
+                ws.send(json.dumps({"success": False, "issue": "time-exceeded", "message": msg}))
                 ws.close()
 
 
