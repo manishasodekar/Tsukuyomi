@@ -1,12 +1,17 @@
 import io
 import logging
 import os
+import subprocess
 import traceback
 from datetime import datetime
 import av
 import time
 import wave
 from io import BytesIO
+
+import requests
+import yt_dlp
+from pydub import AudioSegment
 from utils import heconstants
 from utils.s3_operation import S3SERVICE
 from utils.send_logs import push_logs
@@ -160,13 +165,16 @@ class fileDownloader:
             return None
 
     def save_rtmp_loop(self,
-                       stream_key,
-                       user_type,
+                       message,
                        start_time,
                        stream_url=heconstants.RTMP_SERVER_URL,
                        DATA_DIR="healiom_websocket_asr",
                        ):
         try:
+            stream_key = message.get("stream_key")
+            user_type = message.get("user_type")
+            file_path = message.get("file_path")
+            retry_count = message.get("retry_count")
             logger.info("Received rtmp stream")
             push_logs(care_request_id=stream_key,
                       given_msg="Livestream started (RTMP)",
@@ -226,12 +234,12 @@ class fileDownloader:
                         "es_id": f"{stream_key}_ASR_EXECUTOR",
                         "chunk_no": chunk_count,
                         "file_path": key,
-                        "api_path": "asr",
-                        "api_type": "asr",
+                        "api_path": "clinical_notes",
+                        "api_type": "clinical_notes",
                         "req_type": "encounter",
                         "executor_name": "ASR_EXECUTOR",
                         "state": "SpeechToText",
-                        "retry_count": None,
+                        "retry_count": 0,
                         "uid": None,
                         "request_id": stream_key,
                         "care_req_id": stream_key,
@@ -260,44 +268,123 @@ class fileDownloader:
                 data["stage"] = "rtmp_saving_done"
                 s3.upload_to_s3(key, data, is_json=True)
 
-            data = {
-                "es_id": f"{stream_key}_FILE_DOWNLOADER",
-                "api_path": "asr",
-                "file_path": None,
-                "api_type": "asr",
-                "req_type": "encounter",
-                "executor_name": "FILE_DOWNLOADER",
-                "state": "Completed",
-                "retry_count": None,
-                "uid": None,
-                "request_id": stream_key,
-                "care_req_id": stream_key,
-                "encounter_id": None,
-                "provider_id": None,
-                "review_provider_id": None,
-                "completed": True,
-                "exec_duration": 0.0,
-                "start_time": str(start_time),
-                "end_time": str(datetime.utcnow()),
-            }
-            producer.publish_executor_message(data)
-
         except Exception as exc:
             msg = "Failed rtmp loop saver :: {}".format(exc)
             trace = traceback.format_exc()
             logger.error(msg, trace)
+            if retry_count <= 2:
+                retry_count += 1
+                data = {
+                    "es_id": f"{stream_key}_FILE_DOWNLOADER",
+                    "file_path": file_path,
+                    "api_path": "clinical_notes",
+                    "api_type": "clinical_notes",
+                    "req_type": "encounter",
+                    "executor_name": "FILE_DOWNLOADER",
+                    "state": "Init",
+                    "retry_count": retry_count,
+                    "uid": None,
+                    "request_id": stream_key,
+                    "care_req_id": stream_key,
+                    "encounter_id": None,
+                    "provider_id": None,
+                    "review_provider_id": None,
+                    "completed": False,
+                    "exec_duration": 0.0,
+                    "start_time": str(start_time),
+                    "end_time": str(datetime.utcnow()),
+                }
+                producer.publish_executor_message(data)
+
+    def convert_to_wav(self, input_file):
+        try:
+            output_file = input_file.replace('.tmp', '.wav')
+
+            # command = ['ffmpeg', '-i', input_file, '-ac', '1', '-ar', '16000', output_file]
+            # subprocess.run(command, check=True)
+
+            audio = AudioSegment.from_file(input_file)
+            audio = audio.set_channels(1)
+            audio = audio.set_frame_rate(16000)
+            audio.export(output_file, format='wav')
+
+            return output_file
+
+        except Exception as e:
+            logger.error(f"An unexpected error occurred convert_to_wav {e}")
+
+    def download_file(self, message, start_time):
+        try:
+            request_id = message.get("request_id")
+            file_path = message.get("file_path")
+            retry_count = message.get("retry_count")
+            user_type = message.get("user_type")
+            webhook_url = message.get("webhook_url")
+            api_type = message.get("api_type")
+            api_path = message.get("api_path")
+
+            if "youtube.com" in file_path or "youtu.be" in file_path:
+                local_filename = f"tmp/{request_id}"  # YouTube videos are downloaded as mp4
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': local_filename + '.%(ext)s',
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'wav',
+                        'preferredquality': '192',
+                    }],
+                    'postprocessor_args': [
+                        '-ac', '1',  # Set audio to mono (single channel)
+                        '-ar', '16000'  # Set sample rate to 16k
+                    ],
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([file_path])
+            else:
+                local_filename = f"tmp/{request_id}.tmp"
+                with requests.get(file_path, stream=True) as r:
+                    r.raise_for_status()
+                    with open(local_filename, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+
+            if "youtube.com" in file_path or "youtu.be" in file_path:
+                wav_filename = local_filename + ".wav"
+            else:
+                wav_filename = self.convert_to_wav(local_filename)
+            s3_path = f"{request_id}/{request_id}.wav"
+            s3.upload_to_s3(s3_filename=s3_path, data=open(wav_filename, "rb"))
+
+            try:
+                if os.path.exists(local_filename):
+                    os.remove(local_filename)
+            except PermissionError:
+                logger.error("Permission denied: You don't have permission to delete this file.")
+            except OSError as e:
+                logger.error(f"Error:: {e.strerror}")
+
+            try:
+                if os.path.exists(wav_filename):
+                    os.remove(wav_filename)
+            except PermissionError:
+                logger.error("Permission denied: You don't have permission to delete this file.")
+            except OSError as e:
+                logger.error(f"Error:: {e.strerror}")
+
             data = {
-                "es_id": f"{stream_key}_FILE_DOWNLOADER",
-                "api_path": "asr",
-                "file_path": None,
-                "api_type": "asr",
-                "req_type": "encounter",
-                "executor_name": "FILE_DOWNLOADER",
-                "state": "Failed",
-                "retry_count": None,
+                "es_id": f"{request_id}_ASR_EXECUTOR",
+                "file_path": s3_path,
+                "webhook_url": webhook_url,
+                "api_path": api_path,
+                "api_type": api_type,
+                "req_type": "platform",
+                "user_type": "Provider",
+                "executor_name": "ASR_EXECUTOR",
+                "state": "SpeechToText",
+                "retry_count": 0,
                 "uid": None,
-                "request_id": stream_key,
-                "care_req_id": stream_key,
+                "request_id": request_id,
+                "care_req_id": request_id,
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
@@ -308,7 +395,35 @@ class fileDownloader:
             }
             producer.publish_executor_message(data)
 
+        except Exception as e:
+            logger.error(f"An unexpected error occurred  {e}")
+            if retry_count <= 2:
+                retry_count += 1
+                data = {
+                    "es_id": f"{request_id}_FILE_DOWNLOADER",
+                    "file_path": file_path,
+                    "webhook_url": webhook_url,
+                    "api_path": api_path,
+                    "api_type": api_type,
+                    "req_type": "platform",
+                    "user_type": "Provider",
+                    "executor_name": "FILE_DOWNLOADER",
+                    "state": "Init",
+                    "retry_count": retry_count,
+                    "uid": None,
+                    "request_id": request_id,
+                    "care_req_id": request_id,
+                    "encounter_id": None,
+                    "provider_id": None,
+                    "review_provider_id": None,
+                    "completed": False,
+                    "exec_duration": 0.0,
+                    "start_time": str(datetime.utcnow()),
+                    "end_time": str(datetime.utcnow()),
+                }
 
-if __name__ == "__main__":
-    # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    fileDownloader().save_rtmp_loop("123456", "patient")
+                producer.publish_executor_message(data)
+
+# if __name__ == "__main__":
+#     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#     fileDownloader().save_rtmp_loop("123456", "patient")

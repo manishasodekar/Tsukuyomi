@@ -7,6 +7,7 @@ from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
 from utils import heconstants
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
 
 logger = get_logger()
 num_of_workers = lambda: (multiprocessing.cpu_count() * 2) + 1
@@ -21,6 +22,7 @@ class Executor:
 
     def executor_task(self):
         try:
+            futures = []  # To store the submitted futures
             while True:
                 kafka_service.post_poll()
                 for consumer in kafka_service.post_consumer:
@@ -31,21 +33,36 @@ class Executor:
                             start_time = datetime.utcnow()
                             message_dict = json.loads(message_to_pass)
                             if message_dict.get("state") == "Analytics" and not message_dict.get("completed"):
-                                summary = soap()
-                                stream_key = message_dict.get("care_req_id")
+                                stream_key = None
                                 file_path = message_dict.get("file_path")
-                                logger.info(f"Starting SOAP :: {stream_key} :: {file_path}")
-                                segments, last_ai_preds = summary.get_merge_ai_preds(conversation_id=stream_key)
-                                executor.submit(summary.get_subjective_summary, message_dict, start_time, segments,
-                                                last_ai_preds
-                                                )
-                                executor.submit(summary.get_objective_summary, message_dict, start_time, segments,
-                                                last_ai_preds)
-                                executor.submit(summary.get_clinical_assessment_summary, message_dict, start_time,
-                                                segments,
-                                                last_ai_preds)
-                                executor.submit(summary.get_care_plan_summary, message_dict, start_time, segments,
-                                                last_ai_preds)
+
+                                if message_dict.get("req_type") == "encounter":
+                                    stream_key = message_dict.get("care_req_id")
+                                    logger.info(f"Starting SOAP :: {stream_key} :: {file_path}")
+                                else:
+                                    stream_key = message_dict.get("request_id")
+                                    logger.info(f"Starting SOAP for platform:: {stream_key} :: {file_path}")
+
+                                summary = soap()
+                                segments, last_ai_preds = summary.get_merge_ai_preds(conversation_id=stream_key,
+                                                                                     message=message_dict)
+                                futures = [
+                                    executor.submit(summary.get_subjective_summary, message_dict, start_time, segments,
+                                                    last_ai_preds
+                                                    ),
+                                    executor.submit(summary.get_objective_summary, message_dict, start_time, segments,
+                                                    last_ai_preds),
+                                    executor.submit(summary.get_clinical_assessment_summary, message_dict, start_time,
+                                                    segments,
+                                                    last_ai_preds),
+                                    executor.submit(summary.get_care_plan_summary, message_dict, start_time, segments,
+                                                    last_ai_preds)]
+
+                                # Wait for all futures to complete for this message
+                                for future in as_completed(futures):
+                                    result = future.result()
+
+                                summary.create_delivery_task(message=message_dict)
 
         except Exception as exc:
             msg = "post message polling failed :: {}".format(exc)

@@ -32,11 +32,18 @@ class Executor:
                             start_time = datetime.utcnow()
                             message_dict = json.loads(message_to_pass)
                             if message_dict.get("state") == "SpeechToText" and not message_dict.get("completed"):
-                                asrexecutor = ASRExecutor()
-                                stream_key = message_dict.get("care_req_id")
-                                file_path = message_dict.get("file_path")
-                                logger.info(f"Starting ASR  :: {stream_key} :: {file_path}")
-                                executor.submit(asrexecutor.execute_function, message_dict, start_time)
+                                if message_dict.get("req_type") == "encounter":
+                                    asrexecutor = ASRExecutor()
+                                    stream_key = message_dict.get("care_req_id")
+                                    file_path = message_dict.get("file_path")
+                                    logger.info(f"Starting ASR  :: {stream_key} :: {file_path}")
+                                    executor.submit(asrexecutor.execute_function, message_dict, start_time)
+                                else:
+                                    asrexecutor = ASRExecutor()
+                                    request_id = message_dict.get("request_id")
+                                    file_path = message_dict.get("file_path")
+                                    logger.info(f"Starting ASR for platform  :: {request_id} :: {file_path}")
+                                    executor.submit(asrexecutor.speechToText, message_dict, start_time)
 
         except Exception as exc:
             msg = "post message polling failed :: {}".format(exc)

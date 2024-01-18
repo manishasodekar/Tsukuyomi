@@ -58,14 +58,14 @@ def check_and_start_rtmp(connection_id):
     else:
         data = {
             "es_id": f"{connection_id}_FILE_DOWNLOADER",
-            "api_path": "asr",
             "file_path": None,
-            "api_type": "asr",
+            "api_path": "clinical_notes",
+            "api_type": "clinical_notes",
             "req_type": "encounter",
             "user_type": "Provider",
             "executor_name": "FILE_DOWNLOADER",
             "state": "Init",
-            "retry_count": None,
+            "retry_count": 0,
             "uid": None,
             "request_id": connection_id,
             "care_req_id": connection_id,
@@ -127,6 +127,7 @@ def websocket_handler(env, start_response):
     if "wsgi.websocket" in env:
         ws = env["wsgi.websocket"]
         message = ws.receive()
+        past_time = time.time() - 1800
         logger.info(f"message :: {message}")
         try:
             message = json.loads(message)
@@ -161,7 +162,7 @@ def websocket_handler(env, start_response):
                       he_type=user_type,
                       req_type="websocket_stop",
                       source_type="backend")
-            ws.send(json.dumps({"success": False, message: str(ex)}))
+            ws.send(json.dumps({"success": False, "message": str(ex)}))
             ws.close()
             return
 
@@ -298,6 +299,14 @@ def websocket_handler(env, start_response):
                     if is_rtmp_done:
                         ws.close()
                         break
+
+            current_time = time.time()
+
+            if current_time - past_time > 1800:
+                msg = "More than 30 minutes have passed since the recorded time."
+                logger.info(msg)
+                ws.send(json.dumps({"success": False, "message": msg}))
+                ws.close()
 
 
 if __name__ == "__main__":

@@ -3,4 +3,5 @@
 *.xml
 *.iml
 *.DS_Store
-AUDIOS/*
+AUDIOS
+tmp

@@ -92,11 +92,34 @@ def post_message(stream_key, start_time):
     #     "end_time": str(datetime.utcnow()),
     # }
 
+    data = {
+                "es_id": f"{stream_key}_AI_PRED",
+                "file_path": "6618452a-fef3-42dd-8a0b-52a2224c5f0b/6618452a-fef3-42dd-8a0b-52a2224c5f0b.wav",
+                "webhook_url": "https://webhook.site/28942651-2973-4a2f-8219-a42689715833",
+                "api_path": "asr",
+                "api_type": "asr",
+                "req_type": "paltform",
+                "executor_name": "AI_PRED",
+                "state": "AiPred",
+                "retry_count": 0,
+                "uid": None,
+                "request_id": stream_key,
+                "care_req_id": stream_key,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(start_time),
+                "end_time": str(datetime.utcnow()),
+            }
+
     KafkaService(group_id="asr").publish_executor_message(data)
     print("posted")
 
 
 # Example usage
-stream_key = sys.argv[1]
+# stream_key = sys.argv[1]
+stream_key = "6618452a-fef3-42dd-8a0b-52a2224c5f0b"
 start_time = str(datetime.utcnow())
 post_message(stream_key, start_time)

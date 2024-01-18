@@ -1,5 +1,6 @@
 import json
 import logging
+import traceback
 from datetime import datetime
 from typing import Optional
 import nltk
@@ -155,8 +156,11 @@ class soap:
             msg = "Failed to get OPEN AI SUMMARIES :: {}".format(exc)
             self.logger.error(msg)
 
-    def get_merge_ai_preds(self, conversation_id):
+    def get_merge_ai_preds(self, conversation_id, message):
         try:
+            req_type = message.get("req_type")
+            api_type = message.get("api_type")
+            file_path = message.get("file_path")
             merged_segments = []
             merged_ai_preds = {
                 "age": {"text": None, "value": None, "unit": None},
@@ -187,8 +191,16 @@ class soap:
                     "carePlanSuggested": [],
                 },
             }
-            conversation_datas = s3.get_files_matching_pattern(
-                pattern=f"{conversation_id}/{conversation_id}_*json")
+
+            conversation_datas = None
+            if req_type == "encounter":
+                conversation_datas = s3.get_files_matching_pattern(
+                    pattern=f"{conversation_id}/{conversation_id}_*json")
+            else:
+                # Check if call is from platform
+                if api_type == "clinical_notes":
+                    conversation_datas = [s3.get_json_file(s3_filename=f"{conversation_id}/{conversation_id}.json")]
+
             if conversation_datas:
                 for conversation_data in conversation_datas:
                     merged_segments += conversation_data["segments"]
@@ -196,76 +208,50 @@ class soap:
             ai_preds_file_path = f"{conversation_id}/ai_preds.json"
             if s3.check_file_exists(ai_preds_file_path):
                 merged_ai_preds = s3.get_json_file(s3_filename=ai_preds_file_path)
-                #     ai_preds = conversation_data["ai_preds"]
-                #     if ai_preds:
-                #         for k in [
-                #             "age",
-                #             "gender",
-                #             "ethnicity",
-                #             "height",
-                #             "weight",
-                #             "bmi",
-                #             "ethnicity",
-                #             "insurance",
-                #             "physicalActivityExercise",
-                #             "bloodPressure",
-                #             "pulse",
-                #             "respiratoryRate",
-                #             "bodyTemperature",
-                #             "substanceAbuse",
-                #         ]:
-                #             if isinstance(ai_preds.get(k), dict) and ai_preds[k]["text"]:
-                #                 if not merged_ai_preds[k]["text"]:
-                #                     merged_ai_preds[k]["text"] = ai_preds[k]["text"]
-                #                 else:
-                #                     merged_ai_preds[k]["text"] += ", " + ai_preds[k]["text"]
-                #
-                #                 merged_ai_preds[k]["value"] = merged_ai_preds[k]["text"]
-                #                 merged_ai_preds[k]["unit"] = ai_preds[k]["unit"]
-                #
-                #         for k, v in ai_preds.get("entities", {}).items():
-                #             if k not in merged_ai_preds["entities"]:
-                #                 merged_ai_preds["entities"][k] = []
-                #             merged_ai_preds["entities"][k] += v
-                #
-                # for k in list(merged_ai_preds.keys()):
-                #     if not merged_ai_preds[k]:
-                #         del merged_ai_preds[k]
-                #
-                #     elif (
-                #             isinstance(merged_ai_preds[k], dict)
-                #             and "value" in merged_ai_preds[k]
-                #             and not merged_ai_preds[k]["value"]
-                #     ):
-                #         del merged_ai_preds[k]
-                #
-                # for k in list(merged_ai_preds.get("entities", {}).keys()):
-                #     if not merged_ai_preds["entities"][k]:
-                #         del merged_ai_preds["entities"][k]
+
             return merged_segments, merged_ai_preds
 
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while merging ai preds  {e}")
             return merged_segments, merged_ai_preds
 
-    def get_interested_text(self, last_ai_preds: dict = None, segments: list = None):
+    def get_interested_text(self, last_ai_preds: dict = None, segments: Optional[list] = None,
+                            transcript: Optional[str] = None):
         try:
             interest_texts = []
-            for segment in segments:
-                text = segment["text"]
-                is_imp = False
-                for entity_type, values in last_ai_preds["entities"].items():
-                    if is_imp:
-                        break
-                    for value in values:
-                        words_in_value = [w for w in value["text"].split() if len(w) > 3]
-                        if value["text"].lower() in text.lower() or any(
-                                [w.lower() in text.lower() for w in words_in_value]
-                        ):
-                            is_imp = True
+            if segments:
+                for segment in segments:
+                    text = segment["text"]
+                    is_imp = False
+                    for entity_type, values in last_ai_preds["entities"].items():
+                        if is_imp:
                             break
-                if is_imp:
-                    interest_texts.append(text)
+                        for value in values:
+                            words_in_value = [w for w in value["text"].split() if len(w) > 3]
+                            if value["text"].lower() in text.lower() or any(
+                                    [w.lower() in text.lower() for w in words_in_value]
+                            ):
+                                is_imp = True
+                                break
+                    if is_imp:
+                        interest_texts.append(text)
+            elif transcript:
+                segments = transcript.split(",")
+                for text in segments:
+                    is_imp = False
+                    for entity_type, values in last_ai_preds["entities"].items():
+                        if is_imp:
+                            break
+                        for value in values:
+                            words_in_value = [w for w in value["text"].split() if len(w) > 3]
+                            if value["text"].lower() in text.lower() or any(
+                                    [w.lower() in text.lower() for w in words_in_value]
+                            ):
+                                is_imp = True
+                                break
+                    if is_imp:
+                        interest_texts.append(text)
+
             return interest_texts
         except Exception as e:
             self.logger.error(f"An unexpected error occurred  {e}")
@@ -273,6 +259,8 @@ class soap:
     def get_subjective_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
             conversation_id = message.get("care_req_id")
+            api_type = message.get("api_type")
+            file_path = message.get("file_path")
             subjective_summary = []
             for k in [
                 "age",
@@ -288,7 +276,12 @@ class soap:
                 if k in last_ai_preds:
                     subjective_summary.append(f"{k.capitalize()}: {last_ai_preds[k]['text']}")
 
-            interest_texts = self.get_interested_text(last_ai_preds, segments)
+            if api_type == "soap":
+                input_text = s3.get_json_file(s3_filename=file_path)
+                transcript = input_text.get("transcript")
+                interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
+            else:
+                interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
 
             if interest_texts and len(" ".join(interest_texts).split()) >= 20:
                 summaries = self.get_clinical_summaries_from_openai("\n".join(interest_texts),
@@ -320,12 +313,19 @@ class soap:
     def get_objective_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
             conversation_id = message.get("care_req_id")
+            api_type = message.get("api_type")
+            file_path = message.get("file_path")
             objective_summary = []
             for k in ["bloodPressure", "pulse", "respiratoryRate", "bodyTemperature"]:
                 if k in last_ai_preds:
                     objective_summary.append(f"{k.capitalize()}: {last_ai_preds[k]['text']}")
 
-            interest_texts = self.get_interested_text(last_ai_preds, segments)
+            if api_type == "soap":
+                input_text = s3.get_json_file(s3_filename=file_path)
+                transcript = input_text.get("transcript")
+                interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
+            else:
+                interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
 
             if interest_texts and len(" ".join(interest_texts).split()) >= 20:
                 summaries = self.get_clinical_summaries_from_openai("\n".join(interest_texts),
@@ -364,9 +364,17 @@ class soap:
     def get_clinical_assessment_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
             conversation_id = message.get("care_req_id")
+            api_type = message.get("api_type")
+            file_path = message.get("file_path")
 
             clinical_assessment_summary = []
-            interest_texts = self.get_interested_text(last_ai_preds, segments)
+
+            if api_type == "soap":
+                input_text = s3.get_json_file(s3_filename=file_path)
+                transcript = input_text.get("transcript")
+                interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
+            else:
+                interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
 
             if interest_texts and len(" ".join(interest_texts).split()) >= 20:
                 summaries = self.get_clinical_summaries_from_openai("\n".join(interest_texts),
@@ -406,9 +414,17 @@ class soap:
     def get_care_plan_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
             conversation_id = message.get("care_req_id")
+            api_type = message.get("api_type")
+            file_path = message.get("file_path")
 
             care_plan_summary = []
-            interest_texts = self.get_interested_text(last_ai_preds, segments)
+
+            if api_type == "soap":
+                input_text = s3.get_json_file(s3_filename=file_path)
+                transcript = input_text.get("transcript")
+                interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
+            else:
+                interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
 
             if interest_texts and len(" ".join(interest_texts).split()) >= 20:
                 summaries = self.get_clinical_summaries_from_openai("\n".join(interest_texts),
@@ -440,6 +456,71 @@ class soap:
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while generating carePlanSuggested ::  {e}")
 
+    def create_delivery_task(self, message):
+        try:
+            request_id = message.get("request_id")
+            chunk_no = message.get("chunk_no")
+            file_path = message.get("file_path")
+            webhook_url = message.get("webhook_url")
+            req_type = message.get("req_type")
+            retry_count = message.get("retry_count")
+            api_type = message.get("api_type")
+            api_path = message.get("api_path")
+
+            data = {
+                "es_id": f"{request_id}_FINAL_EXECUTOR",
+                "chunk_no": chunk_no,
+                "file_path": file_path,
+                "webhook_url": webhook_url,
+                "api_path": api_path,
+                "api_type": api_type,
+                "req_type": req_type,
+                "executor_name": "FINAL_EXECUTOR",
+                "state": "Final",
+                "retry_count": retry_count,
+                "uid": None,
+                "request_id": request_id,
+                "care_req_id": request_id,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(datetime.utcnow()),
+                "end_time": str(datetime.utcnow()),
+            }
+            producer.publish_executor_message(data)
+
+        except Exception as exc:
+            msg = "Failed to create delivery task :: {}".format(exc)
+            trace = traceback.format_exc()
+            logger.error(msg, trace)
+
+            if retry_count <= 2:
+                retry_count += 1
+                data = {
+                    "es_id": f"{request_id}_FINAL_EXECUTOR",
+                    "chunk_no": chunk_no,
+                    "file_path": file_path,
+                    "webhook_url": webhook_url,
+                    "api_path": api_path,
+                    "api_type": api_type,
+                    "req_type": req_type,
+                    "executor_name": "FINAL_EXECUTOR",
+                    "state": "Final",
+                    "retry_count": retry_count,
+                    "uid": None,
+                    "request_id": request_id,
+                    "care_req_id": request_id,
+                    "encounter_id": None,
+                    "provider_id": None,
+                    "review_provider_id": None,
+                    "completed": False,
+                    "exec_duration": 0.0,
+                    "start_time": str(datetime.utcnow()),
+                    "end_time": str(datetime.utcnow()),
+                }
+                producer.publish_executor_message(data)
 
 # if __name__ == "__main__":
 #     soap_exe = soap()

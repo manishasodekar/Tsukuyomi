@@ -31,11 +31,16 @@ class Executor:
                             start_time = datetime.utcnow()
                             message_dict = json.loads(message_to_pass)
                             if message_dict.get("state") == "Init":
-                                stream_key = message_dict.get("care_req_id")
-                                user_type = message_dict.get("user_type")
-                                filedownloader = fileDownloader()
-                                logger.info(f"Starting Downloading File :: {stream_key}")
-                                executor.submit(filedownloader.save_rtmp_loop, stream_key, user_type, start_time)
+                                if message_dict.get("req_type") == "encounter":
+                                    stream_key = message_dict.get("care_req_id")
+                                    filedownloader = fileDownloader()
+                                    logger.info(f"Starting RTMP saver loop :: {stream_key}")
+                                    executor.submit(filedownloader.save_rtmp_loop, message_dict, start_time)
+                                else:
+                                    request_id = message_dict.get("request_id")
+                                    filedownloader = fileDownloader()
+                                    logger.info(f"Downloading Audio File :: {request_id}")
+                                    executor.submit(filedownloader.download_file, message_dict, start_time)
 
         except Exception as exc:
             msg = "post message polling failed :: {}".format(exc)

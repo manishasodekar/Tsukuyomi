@@ -5,6 +5,9 @@ import boto3
 from botocore.exceptions import ClientError
 from elasticsearch import Elasticsearch
 
+os.environ["ENVIRONMENT"] = "dev"
+os.environ["AWS_ACCESS_KEY"] = "AKIA2WUJAEHPOWTHM6HX"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "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"
 AWS_ACCESS_KEY = os.environ["AWS_ACCESS_KEY"]
 AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
 env = os.environ["ENVIRONMENT"]
@@ -147,6 +150,7 @@ OPENAI_APIKEY = secret_values.get("OPENAI_APIKEY")
 API_KEY = "test_key"
 GPT_MODELS = ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]
 EXECUTOR_TOPIC = secret_values.get("EXECUTOR_TOPIC")
+EXECUTOR_TOPIC = "exe-queue"
 ASR_BUCKET = secret_values.get("ASR_BUCKET")
 SYNC_SERVER = secret_values.get("SYNC_SERVER")
 BOOTSTRAP_SERVERS = secret_values.get("BOOTSTRAP_SERVERS")
