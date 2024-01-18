@@ -148,7 +148,6 @@ OPENAI_APIKEY = secret_values.get("OPENAI_APIKEY")
 API_KEY = "test_key"
 GPT_MODELS = ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]
 EXECUTOR_TOPIC = secret_values.get("EXECUTOR_TOPIC")
-EXECUTOR_TOPIC = "exe-queue"
 ASR_BUCKET = secret_values.get("ASR_BUCKET")
 SYNC_SERVER = secret_values.get("SYNC_SERVER")
 BOOTSTRAP_SERVERS = secret_values.get("BOOTSTRAP_SERVERS")
