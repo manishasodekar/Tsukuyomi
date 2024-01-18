@@ -1,0 +1,14 @@
+#!/bin/sh
+FROM python:3.8-slim-buster
+MAINTAINER Manish Asodekar "manish@healiom.com"
+RUN mkdir app
+WORKDIR /app
+COPY . /app
+ENV PYTHONPATH=/app
+RUN apt-get update && apt-get install -y build-essential && \
+    apt-get install -y ffmpeg
+RUN apt-get update && apt-get install -y build-essential wget curl
+ADD ./requirements.txt /app/requirements.txt
+RUN pip install -r requirements.txt
+ADD . /app
+CMD ["python3", "/app/executors/final_executor.py"]
