@@ -127,7 +127,7 @@ def websocket_handler(env, start_response):
     if "wsgi.websocket" in env:
         ws = env["wsgi.websocket"]
         message = ws.receive()
-        past_time = time.time() - 1800
+        initial_timestamp = time.time()
         logger.info(f"message :: {message}")
         try:
             message = json.loads(message)
@@ -301,8 +301,8 @@ def websocket_handler(env, start_response):
                         break
 
             current_time = time.time()
-
-            if current_time - past_time > 1800:
+            time_difference = current_time - initial_timestamp
+            if time_difference > 1800:
                 msg = "More than 30 minutes have passed since the recorded time."
                 logger.info(msg)
                 ws.send(json.dumps({"success": False, "issue": "time-exceeded", "message": msg}))
