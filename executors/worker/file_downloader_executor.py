@@ -171,7 +171,7 @@ class fileDownloader:
                        DATA_DIR="healiom_websocket_asr",
                        ):
         try:
-            stream_key = message.get("stream_key")
+            stream_key = message.get("care_req_id")
             user_type = message.get("user_type")
             file_path = message.get("file_path")
             retry_count = message.get("retry_count")
