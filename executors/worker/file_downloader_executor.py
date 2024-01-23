@@ -13,6 +13,7 @@ import requests
 import yt_dlp
 from pydub import AudioSegment
 from utils import heconstants
+from utils.push_error import PushErrorToSlack
 from utils.s3_operation import S3SERVICE
 from utils.send_logs import push_logs
 from services.kafka.kafka_service import KafkaService
@@ -295,6 +296,9 @@ class fileDownloader:
                     "end_time": str(datetime.utcnow()),
                 }
                 producer.publish_executor_message(data)
+                PushErrorToSlack().push_commmon_messages(f"Encounter-{stream_key}",
+                                                         f"Filedownloader message is being reprocessed",
+                                                         heconstants.AI_NOTIFICATIONS_SLACK_URL)
 
     def convert_to_wav(self, input_file):
         try:
@@ -397,6 +401,9 @@ class fileDownloader:
 
         except Exception as e:
             logger.error(f"An unexpected error occurred  {e}")
+            PushErrorToSlack().push_commmon_messages(f"Encounter-{request_id}",
+                                                     f"Filedownloader Error :: {e}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)
             if retry_count <= 2:
                 retry_count += 1
                 data = {
@@ -423,6 +430,9 @@ class fileDownloader:
                 }
 
                 producer.publish_executor_message(data)
+                PushErrorToSlack().push_commmon_messages(f"Encounter-{request_id}",
+                                                         f"Filedownloader message is being reprocessed",
+                                                         heconstants.AI_NOTIFICATIONS_SLACK_URL)
 
 # if __name__ == "__main__":
 #     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

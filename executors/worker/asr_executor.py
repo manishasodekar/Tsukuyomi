@@ -8,6 +8,7 @@ import av
 import time
 import requests
 from utils import heconstants
+from utils.push_error import PushErrorToSlack
 from utils.s3_operation import S3SERVICE
 from pydub.utils import mediainfo
 from services.kafka.kafka_service import KafkaService
@@ -67,18 +68,6 @@ class ASRExecutor:
                 )
 
             logger.info(f"total_duration_until_now :: {total_duration_until_now}")
-
-            # if len(user_name.split()) > 1 or len(conversation_id.split()) > 1:
-            #     raise Exception("Invalid user_name or conversation_id")
-
-            # conversation_directory = f"{self.AUDIO_DIR}/{conversation_id}"
-
-            # try:
-            #     os.makedirs(conversation_directory, exist_ok=True)
-            # except:
-            #     pass
-            #
-            # audio_path = os.path.join(conversation_directory, file_path.split("/")[1])
             logger.info(f"audio_path :: {file_path}")
 
             audio_stream = BytesIO()
@@ -96,77 +85,49 @@ class ASRExecutor:
             else:
                 raise Exception("No audio file found")
 
-            # try:
-            #     file_type, duration, extension = self.get_audio_video_duration_and_extension(
-            #         audio_path
-            #     )
-            #     logger.info(f"duration :: {duration}")
-            #
-            # except:
-            #     os.system(
-            #         f"ffmpeg -hide_banner -loglevel panic -y -i {audio_path} -acodec pcm_s16le -ac 1 -ar 16000 {audio_path}.wav"
-            #     )
-            #
-            #     audio_path = audio_path + ".wav"
-            #     try:
-            #         file_type, duration, extension = self.get_audio_video_duration_and_extension(
-            #             audio_path
-            #         )
-            #     except:
-            #         # todo log exception
-            #         "", 0, os.path.splitext(audio_path)[1]
-            #
-            # if not audio_path.endswith(extension):
-            #     os.rename(audio_path, audio_path + extension)
-            #     audio_path = audio_path + extension
+            try:
+                audio_file = audio_stream
+                # Read audio data with pydub
+                audio = AudioSegment.from_file(audio_file, format="wav")
+                duration_in_milliseconds = len(audio)
+                duration = duration_in_milliseconds / 1000.0
+                audio_stream.name = file_path.split("/")[1]
+                audio_stream.seek(0)
+                transcription_result = requests.post(
+                    heconstants.AI_SERVER + "/transcribe/infer",
+                    files={"f1": audio_stream},
+                ).json()["prediction"][0]
+                # todo change fixed ip to DNS
+                # transcription_result = requests.post(
+                #     heconstants.AI_SERVER + "/transcribe/infer",
+                #     files={"f1": open(audio_path, "rb")},
+                # ).json()["prediction"][0]
 
-        except Exception as ex:
-            raise ex
+            except Exception as ex:
+                print(ex)
+                # esquery
+                data = {
+                    "received_at": received_at,
+                    "conversation_id": conversation_id,
+                    "user_name": user_name,
+                    "duration": duration,
+                    "success": False,
+                    "audio_path": file_path,
+                }
+                s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
+                raise Exception("Transcription failed")
 
-        try:
-            audio_file = audio_stream
-            # Read audio data with pydub
-            audio = AudioSegment.from_file(audio_file, format="wav")
-            duration_in_milliseconds = len(audio)
-            duration = duration_in_milliseconds / 1000.0
-            audio_stream.name = file_path.split("/")[1]
-            audio_stream.seek(0)
-            transcription_result = requests.post(
-                heconstants.AI_SERVER + "/transcribe/infer",
-                files={"f1": audio_stream},
-            ).json()["prediction"][0]
-            # todo change fixed ip to DNS
-            # transcription_result = requests.post(
-            #     heconstants.AI_SERVER + "/transcribe/infer",
-            #     files={"f1": open(audio_path, "rb")},
-            # ).json()["prediction"][0]
+            current_segments = transcription_result["segments"]
+            for i in range(len(current_segments)):
+                current_segments[i]["start"] = (
+                        total_duration_until_now + current_segments[i]["start"]
+                )
+                current_segments[i]["end"] = (
+                        total_duration_until_now + current_segments[i]["end"]
+                )
 
-        except Exception as ex:
-            print(ex)
-            # esquery
-            data = {
-                "received_at": received_at,
-                "conversation_id": conversation_id,
-                "user_name": user_name,
-                "duration": duration,
-                "success": False,
-                "audio_path": file_path,
-            }
-            s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
-            raise Exception("Transcription failed")
+            language = transcription_result["language"]
 
-        current_segments = transcription_result["segments"]
-        for i in range(len(current_segments)):
-            current_segments[i]["start"] = (
-                    total_duration_until_now + current_segments[i]["start"]
-            )
-            current_segments[i]["end"] = (
-                    total_duration_until_now + current_segments[i]["end"]
-            )
-
-        language = transcription_result["language"]
-
-        try:
             data = {"received_at": received_at,
                     "chunk_no": chunk_no,
                     "conversation_id": conversation_id,
@@ -204,6 +165,10 @@ class ASRExecutor:
             producer.publish_executor_message(data)
 
         except:
+            logger.info(f"An unexpected error occurred :: {ex}")
+            PushErrorToSlack().push_commmon_messages(f"Encounter-{conversation_id}",
+                                                     f"AsrExecutor Error :: {ex}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)
             data = {"received_at": received_at,
                     "chunk_no": chunk_no,
                     "conversation_id": conversation_id,
@@ -242,6 +207,9 @@ class ASRExecutor:
                     "end_time": str(datetime.utcnow()),
                 }
                 producer.publish_executor_message(data)
+                PushErrorToSlack().push_commmon_messages(f"Encounter-{conversation_id}",
+                                                         f"AsrExecutor message is being reprocessed",
+                                                         heconstants.AI_NOTIFICATIONS_SLACK_URL)
 
     def speechToText(self, message, start_time):
         try:
@@ -332,6 +300,10 @@ class ASRExecutor:
                 self.create_delivery_task(message=message)
 
         except Exception as ex:
+            logger.error(f"An unexpected error occurred :: {ex}")
+            PushErrorToSlack().push_commmon_messages(f"Encounter-{request_id}",
+                                                     f"AsrExecutor Error :: {ex}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)
             data = {"received_at": received_at,
                     "conversation_id": request_id,
                     "user_name": user_name,
@@ -369,6 +341,9 @@ class ASRExecutor:
                     "end_time": str(datetime.utcnow()),
                 }
                 producer.publish_executor_message(data)
+                PushErrorToSlack().push_commmon_messages(f"Encounter-{request_id}",
+                                                         f"AsrExecutor message is being reprocessed",
+                                                         heconstants.AI_NOTIFICATIONS_SLACK_URL)
 
             logger.error(f"An unexpected error occurred speechtotext {request_id} :: {ex}")
 

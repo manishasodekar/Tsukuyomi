@@ -1,5 +1,4 @@
 from gevent import monkey
-
 monkey.patch_all()
 
 import os
@@ -17,6 +16,7 @@ from utils import heconstants
 from config.logconfig import get_logger
 from utils.s3_operation import S3SERVICE
 from services.kafka.kafka_service import KafkaService
+from utils.push_error import PushErrorToSlack
 from datetime import datetime
 
 s3 = S3SERVICE()
@@ -139,6 +139,9 @@ def websocket_handler(env, start_response):
                       he_type=user_type,
                       req_type="websocket_start",
                       source_type="backend")
+            PushErrorToSlack().push_commmon_messages(f"Encounter-{connection_id}",
+                                                     f"Websocket has started :: {ws}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)
 
             triage_ai_suggestion = message.get("triage_ai_suggestion", {})
             triage_key = f"{connection_id}/triage_ai_suggestion.json"
@@ -162,6 +165,9 @@ def websocket_handler(env, start_response):
                       he_type=user_type,
                       req_type="websocket_stop",
                       source_type="backend")
+            PushErrorToSlack().push_commmon_messages(f"Encounter-{connection_id}",
+                                                     f"Websocket received exception :: {ex} :: \n {trace}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)
             ws.send(json.dumps({"success": False, "message": str(ex)}))
             ws.close()
             return
@@ -238,6 +244,9 @@ def websocket_handler(env, start_response):
                               he_type=user_type,
                               req_type="websocket_stop",
                               source_type="backend")
+                    PushErrorToSlack().push_commmon_messages(f"Encounter-{connection_id}",
+                                                             f"finished AI rtmp: {connection_id}",
+                                                             heconstants.AI_NOTIFICATIONS_SLACK_URL)
                     ws.close()
                 try:
                     latest_ai_preds_resp = None
@@ -279,6 +288,10 @@ def websocket_handler(env, start_response):
                                           he_type=user_type,
                                           req_type="websocket_stop",
                                           source_type="backend")
+                                PushErrorToSlack().push_commmon_messages(f"Encounter-{connection_id}",
+                                                                         f"Websocket has closed by server - NO ACK "
+                                                                         f"RECEIVED",
+                                                                         heconstants.AI_NOTIFICATIONS_SLACK_URL)
                                 ws.close()
                                 break
 
@@ -290,6 +303,9 @@ def websocket_handler(env, start_response):
                                           he_type=user_type,
                                           req_type="websocket_stop",
                                           source_type="backend")
+                                PushErrorToSlack().push_commmon_messages(f"Encounter-{connection_id}",
+                                                                         f"websocket has closed by client",
+                                                                         heconstants.AI_NOTIFICATIONS_SLACK_URL)
                                 ws.close()
                                 break
 

@@ -13,6 +13,7 @@ from io import BytesIO
 import requests
 from pydub import AudioSegment
 from utils import heconstants
+from utils.push_error import PushErrorToSlack
 from utils.s3_operation import S3SERVICE
 from utils.send_logs import push_logs
 from services.kafka.kafka_service import KafkaService
@@ -134,6 +135,9 @@ class finalExecutor:
                     if len(response_json["transcript"]) > 0:
                         status_code, response_text = self.send_webhook(webhook_url, response_json)
                         logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
+                        PushErrorToSlack().push_commmon_messages(f"Encounter-{request_id}",
+                                                                 f"Successfully sent response to webhook :: {webhook_url}",
+                                                                 heconstants.AI_NOTIFICATIONS_SLACK_URL)
                     else:
                         error_resp = {"success": False,
                                       "request_id": request_id,
@@ -150,3 +154,6 @@ class finalExecutor:
             msg = "Failed to merge and send ai_preds :: {}".format(exc)
             trace = traceback.format_exc()
             logger.error(msg, trace)
+            PushErrorToSlack().push_commmon_messages(f"Encounter-{request_id}",
+                                                     f"Failed to send webhook respond :: {exc}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)

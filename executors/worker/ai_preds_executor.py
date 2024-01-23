@@ -5,6 +5,7 @@ from datetime import datetime
 import requests
 import openai
 from utils import heconstants
+from utils.push_error import PushErrorToSlack
 from utils.s3_operation import S3SERVICE
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
@@ -275,6 +276,9 @@ class aiPreds:
             msg = "Failed to get AI PREDICTION :: {}".format(exc)
             trace = traceback.format_exc()
             logger.error(msg, trace)
+            PushErrorToSlack().push_commmon_messages(f"Encounter-{conversation_id}",
+                                                     f"AiPreds Error :: {exc} :: {trace}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)
             data = {
                 "es_id": f"{conversation_id}_AI_PRED",
                 "file_path": file_path,
@@ -300,6 +304,9 @@ class aiPreds:
                 retry_count += 1
                 data["retry_count"] = retry_count
                 producer.publish_executor_message(data)
+                PushErrorToSlack().push_commmon_messages(f"Encounter-{conversation_id}",
+                                                         f"AiPreds message being reprocessed",
+                                                         heconstants.AI_NOTIFICATIONS_SLACK_URL)
             else:
                 if api_type == "clinical_notes":
                     self.create_delivery_task(data)
@@ -448,6 +455,9 @@ class aiPreds:
         except Exception as exc:
             msg = "Failed to get OPEN AI PREDICTION :: {}".format(exc)
             logger.error(msg)
+            PushErrorToSlack().push_commmon_messages(f"Encounter",
+                                                     f"AiPreds OpenAI Error :: {exc}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)
 
     def create_delivery_task(self, message):
         try:

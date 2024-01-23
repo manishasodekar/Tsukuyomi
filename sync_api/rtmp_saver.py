@@ -17,6 +17,7 @@ from config.logconfig import get_logger
 from botocore.exceptions import NoCredentialsError
 from gevent import Timeout
 from utils import heconstants
+from utils.push_error import PushErrorToSlack
 
 logger = get_logger()
 logger.setLevel(logging.INFO)
@@ -237,6 +238,9 @@ def yield_chunks_from_rtmp_stream(stream_key, user_type, stream_url=heconstants.
                               he_type=user_type,
                               req_type="rtmp_restart",
                               source_type="backend")
+                    PushErrorToSlack().push_commmon_messages(f"Encounter-{stream_key}",
+                                                             f"Livestream restarted (RTMP)",
+                                                             heconstants.AI_NOTIFICATIONS_SLACK_URL)
                 continue  # Continue the loop after reconnection
 
             except av.error.OSError as e:  # Catch specific PyAV exceptions here
@@ -258,6 +262,9 @@ def yield_chunks_from_rtmp_stream(stream_key, user_type, stream_url=heconstants.
                                   he_type=user_type,
                                   req_type="rtmp_restart",
                                   source_type="backend")
+                        PushErrorToSlack().push_commmon_messages(f"Encounter-{stream_key}",
+                                                                 f"Livestream restarted (RTMP)",
+                                                                 heconstants.AI_NOTIFICATIONS_SLACK_URL)
                     continue  # Continue the loop after reconnection
 
             except Exception as e:
@@ -277,6 +284,9 @@ def yield_chunks_from_rtmp_stream(stream_key, user_type, stream_url=heconstants.
                               he_type=user_type,
                               req_type="rtmp_restart",
                               source_type="backend")
+                    PushErrorToSlack().push_commmon_messages(f"Encounter-{stream_key}",
+                                                             f"Livestream restarted (RTMP)",
+                                                             heconstants.AI_NOTIFICATIONS_SLACK_URL)
                 continue  # Continue the loop after reconnection
 
         s16_destination.close()
@@ -288,6 +298,9 @@ def yield_chunks_from_rtmp_stream(stream_key, user_type, stream_url=heconstants.
                   he_type=user_type,
                   req_type="rtmp_stop",
                   source_type="backend")
+        PushErrorToSlack().push_commmon_messages(f"Encounter-{stream_key}",
+                                                 f"Livestream stopped (RTMP)",
+                                                 heconstants.AI_NOTIFICATIONS_SLACK_URL)
         return None
 
 def is_speech_present(byte_data, model, get_speech_ts):
@@ -316,6 +329,9 @@ def save_rtmp_loop(
                   he_type=user_type,
                   req_type="rtmp_start",
                   source_type="backend")
+        PushErrorToSlack().push_commmon_messages(f"Encounter-{stream_key}",
+                                                 f"Livestream started (WS QUICK LOOP)",
+                                                 heconstants.AI_NOTIFICATIONS_SLACK_URL)
 
         stream_url = heconstants.RTMP_SERVER_URL
         rtmp_iterator = yield_chunks_from_rtmp_stream(stream_key, user_type, stream_url)
@@ -398,6 +414,9 @@ def save_rtmp_loop(
                               he_type=user_type,
                               req_type="websocket_stop",
                               source_type="backend")
+                    PushErrorToSlack().push_commmon_messages(f"Encounter-{stream_key}",
+                                                             f"Websocket has closed by server - NO ACK RECEIVED",
+                                                             heconstants.AI_NOTIFICATIONS_SLACK_URL)
                     websocket.close()
                     break
 
@@ -409,6 +428,9 @@ def save_rtmp_loop(
                               he_type=user_type,
                               req_type="websocket_stop",
                               source_type="backend")
+                    PushErrorToSlack().push_commmon_messages(f"Encounter-{stream_key}",
+                                                             f"websocket has closed by client",
+                                                             heconstants.AI_NOTIFICATIONS_SLACK_URL)
                     websocket.close()
                     break
 

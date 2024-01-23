@@ -7,6 +7,7 @@ import nltk
 
 import openai
 from utils import heconstants
+from utils.push_error import PushErrorToSlack
 from utils.s3_operation import S3SERVICE
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
@@ -155,6 +156,9 @@ class soap:
         except Exception as exc:
             msg = "Failed to get OPEN AI SUMMARIES :: {}".format(exc)
             self.logger.error(msg)
+            PushErrorToSlack().push_commmon_messages(f"Encounter",
+                                                     f"SOAP OpenAI Error :: {exc}",
+                                                     heconstants.AI_NOTIFICATIONS_SLACK_URL)
 
     def get_merge_ai_preds(self, conversation_id, message):
         try:
