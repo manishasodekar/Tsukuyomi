@@ -263,7 +263,7 @@ def websocket_handler(env, start_response):
                         if not is_transcript_not_ready:
                             try:
                                 logger.info(f"SENDING AI PREDS TO WS :: {ws}")
-                                latest_ai_preds_resp["triage_ai_suggestion"] = triage_ai_suggestion
+                                # latest_ai_preds_resp["triage_ai_suggestion"] = triage_ai_suggestion
                                 latest_ai_preds_resp["uid"] = uid
                                 ws.send(json.dumps(latest_ai_preds_resp))
                                 merged_json_key = f"{connection_id}/All_Preds.json"
