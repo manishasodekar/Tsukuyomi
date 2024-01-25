@@ -326,6 +326,14 @@ def save_rtmp_loop(
             frames_per_chunk = 16000 * heconstants.quick_loop_chunk_duration  # N seconds of frames at 16000 Hz
             bytes_per_frame = 2  # Assuming 16-bit audio (2 bytes per frame)
 
+            if 1 == 1:
+                # Initialize a buffer for merged audio
+                merged_audio_buffer = io.BytesIO()
+                merged_WAV_F = wave.open(merged_audio_buffer, "wb")
+                merged_WAV_F.setnchannels(1)
+                merged_WAV_F.setsampwidth(2)
+                merged_WAV_F.setframerate(16000)
+
             while True:
                 chunk_start_time = time.time()
                 chunk_start_datetime = datetime.utcnow()
@@ -369,6 +377,10 @@ def save_rtmp_loop(
                 key = f"{stream_key}/{stream_key}_chunk{chunk_count}.wav"
                 wav_buffer.name = key.split("/")[1]
                 wav_buffer.seek(0)  # Reset buffer pointer to the beginning
+                if 1 == 1:
+                    chunk_data = wav_buffer.read()
+                    merged_WAV_F.writeframes(chunk_data)
+
                 # logger.info(f"sending chunks for transcription :: {key}")
                 transcription_result = requests.post(
                     heconstants.AI_SERVER + "/infer",
@@ -417,6 +429,13 @@ def save_rtmp_loop(
                     break
         else:
             logger.info("rtmp_iterator IS NONE")
+
+        if 1 == 1:
+            # Finalize merged audio and upload
+            merged_WAV_F.close()
+            merged_audio_buffer.seek(0)
+            merged_audio_key = f"{stream_key}/{stream_key}.wav"
+            s3.upload_to_s3(merged_audio_key, merged_audio_buffer.read())
 
         # esquery
         logger.info("Stopped writing chunks")

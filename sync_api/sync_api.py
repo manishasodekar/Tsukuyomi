@@ -205,10 +205,9 @@ class History(object):
 class clinicalNotes(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
-        data = req.media
-        audio_url = data.get("audio_url")
+        audio_url = req.params.get("audio_url")
         if audio_url is None:
-            self.logger.error("Audio url is missing.")
+            self.logger.error("audio_url query parameter is missing.")
             raise falcon.HTTPError(status=400, description="Audio url is missing.")
         request_id = generate_request_id()
         resp.set_header('Request_ID', request_id)
@@ -219,10 +218,9 @@ class clinicalNotes(object):
 class Transcription(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
-        data = req.media
-        audio_url = data.get("audio_url")
+        audio_url = req.params.get("audio_url")
         if audio_url is None:
-            self.logger.error("Audio url is missing.")
+            self.logger.error("audio_url query parameter is missing.")
             raise falcon.HTTPError(status=400, description="Audio url is missing.")
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
