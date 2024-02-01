@@ -24,7 +24,7 @@ logger = get_logger()
 logger.setLevel(logging.INFO)
 
 
-class finalExecutor:
+class dataExporterExecutor:
     def __init__(self):
         pass
 

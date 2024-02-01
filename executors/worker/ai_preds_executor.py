@@ -461,15 +461,15 @@ class aiPreds:
             retry_count = message.get("retry_count")
 
             data = {
-                "es_id": f"{request_id}_FINAL_EXECUTOR",
+                "es_id": f"{request_id}_DATA_EXPORTER",
                 "chunk_no": chunk_no,
                 "file_path": file_path,
                 "webhook_url": webhook_url,
                 "api_path": api_path,
                 "api_type": api_type,
                 "req_type": req_type,
-                "executor_name": "FINAL_EXECUTOR",
-                "state": "Final",
+                "executor_name": "DATA_EXPORTER",
+                "state": "DataExporter",
                 "retry_count": retry_count,
                 "uid": None,
                 "request_id": request_id,
