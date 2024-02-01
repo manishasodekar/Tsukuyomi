@@ -377,9 +377,6 @@ def save_rtmp_loop(
                 key = f"{stream_key}/{stream_key}_chunk{chunk_count}.wav"
                 wav_buffer.name = key.split("/")[1]
                 wav_buffer.seek(0)  # Reset buffer pointer to the beginning
-                if 1 == 1:
-                    chunk_data = wav_buffer.read()
-                    merged_WAV_F.writeframes(chunk_data)
 
                 # logger.info(f"sending chunks for transcription :: {key}")
                 transcription_result = requests.post(
@@ -424,6 +421,10 @@ def save_rtmp_loop(
                     websocket.close()
                     break
 
+                if 1 == 1:
+                    chunk_data = wav_buffer.read()
+                    merged_WAV_F.writeframes(chunk_data)
+                    
                 if current_time - chunk_start_time < heconstants.quick_loop_chunk_duration:
                     # Break the while loop if the last chunk duration is less than 5 seconds
                     break
