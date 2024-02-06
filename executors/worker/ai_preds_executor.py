@@ -301,8 +301,13 @@ class aiPreds:
                 data["retry_count"] = retry_count
                 producer.publish_executor_message(data)
             else:
-                if api_type == "clinical_notes":
-                    self.create_delivery_task(data)
+                response_json = {"request_id": conversation_id,
+                                 "status": "Failed"}
+                merged_json_key = f"{conversation_id}/All_Preds.json"
+                s3.upload_to_s3(merged_json_key, response_json, is_json=True)
+                # if api_type == "clinical_notes":
+                data["failed_state"] = "AiPred"
+                self.create_delivery_task(data)
 
     def string_to_dict(self, input_string):
         # Initialize an empty dictionary
@@ -459,6 +464,7 @@ class aiPreds:
             api_type = message.get("api_type")
             api_path = message.get("api_path")
             retry_count = message.get("retry_count")
+            failed_state = message.get("failed_state")
 
             data = {
                 "es_id": f"{request_id}_FINAL_EXECUTOR",
@@ -470,6 +476,7 @@ class aiPreds:
                 "req_type": req_type,
                 "executor_name": "FINAL_EXECUTOR",
                 "state": "Final",
+                "failed_state": failed_state,
                 "retry_count": retry_count,
                 "uid": None,
                 "request_id": request_id,

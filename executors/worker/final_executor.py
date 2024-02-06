@@ -46,6 +46,7 @@ class finalExecutor:
             webhook_url = message.get("webhook_url")
             api_type = message.get("api_type")
             file_path = message.get("file_path")
+            failed_state = message.get("failed_state")
 
             logger.info("MERGING All AIPREDS")
 
@@ -128,10 +129,15 @@ class finalExecutor:
 
                     response_json["success"] = True
 
+                    if not failed_state:
+                        response_json["status"] = "Completed"
+                    else:
+                        response_json["status"] = "Failed"
+
                     merged_json_key = f"{request_id}/All_Preds.json"
                     s3.upload_to_s3(merged_json_key, response_json, is_json=True)
 
-                    if len(response_json["transcript"]) > 0:
+                    if len(response_json["transcript"]) > 0 and not failed_state:
                         status_code, response_text = self.send_webhook(webhook_url, response_json)
                         logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
                     else:
@@ -150,3 +156,7 @@ class finalExecutor:
             msg = "Failed to merge and send ai_preds :: {}".format(exc)
             trace = traceback.format_exc()
             logger.error(msg, trace)
+            response_json = {"request_id": request_id,
+                             "status": "Failed"}
+            merged_json_key = f"{request_id}/All_Preds.json"
+            s3.upload_to_s3(merged_json_key, response_json, is_json=True)

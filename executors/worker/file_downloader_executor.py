@@ -423,7 +423,11 @@ class fileDownloader:
                 }
 
                 producer.publish_executor_message(data)
-
+            else:
+                response_json = {"request_id": request_id,
+                                 "status": "Failed"}
+                merged_json_key = f"{request_id}/All_Preds.json"
+                s3.upload_to_s3(merged_json_key, response_json, is_json=True)
 # if __name__ == "__main__":
 #     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 #     fileDownloader().save_rtmp_loop("123456", "patient")
