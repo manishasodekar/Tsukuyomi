@@ -112,20 +112,42 @@ class soap:
 
         return result
 
-    def get_clinical_summaries_from_openai(self, text, summary_type: Optional[str] = None):
+    def get_clinical_summaries_from_openai(self, transcript_text, triage_ai_preds, summary_type: Optional[str] = None):
         try:
-            messages = [
-                {
-                    "role": "system",
-                    # "content": """Generate clinical summaries following their description for the following transcript""",
-                    "content": """"Summarize the medical case in the following format: SUBJECTIVE,
-                    OBJECTIVE, ASSESSMENT, PLAN. It is important to maintain accuracy and relevance to the medical
-                    context and omit any non-medical chatter, assumptions, or speculations. Provide the asked
-                    information in a clear and concise manner, structured, you are not suppose to assume anything and
-                    dont use any hypothesis , rememeber to generate results in points.""",
-                },
-                {"role": "user", "content": f"TEXT: {text}"},
-            ]
+            if triage_ai_preds:
+                messages = [
+                    {
+                        "role": "system",
+                        # "content": """Generate clinical summaries following their description for the following transcript""",
+                        "content": """Summarize the medical case from given PATIENT PROVIDER CONVERSATION and AI 
+                        TRIAGE CONVERSATION in the following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN. It is 
+                        important to maintain accuracy and relevance to the medical context and omit any non-medical 
+                        chatter, assumptions, or speculations. Provide the asked information in a clear and concise 
+                        manner, structured, and remember to generate results in points. Make sure any information is 
+                        only present in one section (basically no duplicate information should be there). You are not 
+                        supposed to assume anything and don't use any hypothesis. This ensures clarity and precision 
+                        in the medical summary, focusing solely on the facts presented.""",
+                    },
+                    {"role": "user", "content": f"AI TRIAGE CONVERSATION:\n {triage_ai_preds} \n\nPATIENT PROVIDER "
+                                                f"CONVERSATION:\n {transcript_text}"},
+                    # {"role": "user", "content": f"TEXT: {text}"},
+                ]
+            else:
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """Summarize the medical case from given PATIENT PROVIDER CONVERSATION in the 
+                        following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN. It is important to maintain 
+                        accuracy and relevance to the medical context and omit any non-medical chatter, assumptions, 
+                        or speculations. Provide the asked information in a clear and concise manner, structured, 
+                        and remember to generate results in points. Make sure any information is only present in one 
+                        section (basically no duplicate information should be there). You are not supposed to assume 
+                        anything and don't use any hypothesis. This ensures clarity and precision in the medical 
+                        summary, focusing solely on the facts presented.""",
+                    },
+                    {"role": "user", "content": f"PATIENT PROVIDER CONVERSATION:\n {transcript_text}"},
+                    # {"role": "user", "content": f"TEXT: {text}"},
+                ]
 
             # summary_function = self.filter_summary_properties(summary_type=summary_type)
 
@@ -255,6 +277,177 @@ class soap:
             return interest_texts
         except Exception as e:
             self.logger.error(f"An unexpected error occurred  {e}")
+
+    def get_summary(self, message, start_time):
+        try:
+            conversation_id = message.get("care_req_id")
+            api_type = message.get("api_type")
+            file_path = message.get("file_path")
+            req_type = message.get("req_type")
+            chunk_no = message.get("chunk_no")
+            retry_count = message.get("retry_count", 0)
+            webhook_url = message.get("webhook_url")
+            api_type = message.get("api_type")
+            api_path = message.get("api_path")
+            triage_ai_preds = None
+
+            segments, last_ai_preds = self.get_merge_ai_preds(conversation_id=conversation_id, message=message)
+
+            subjective_summary = []
+            for k in [
+                "age",
+                "gender",
+                "height",
+                "weight",
+                "bmi",
+                "ethnicity",
+                "substanceAbuse",
+                "physicalActivityExercise",
+                "allergies",
+            ]:
+                if k in last_ai_preds:
+                    if k == "substanceAbuse":
+                        if "no" in last_ai_preds[k]['text']:
+                            subjective_summary.append("The patient reported no history of substance abuse.")
+                        elif "yes" in last_ai_preds[k]['text']:
+                            subjective_summary.append("The patient disclosed a history of substance abuse.")
+                        else:
+                            subjective_summary.append(f"{k.capitalize()}: {last_ai_preds[k]['text']}")
+                    else:
+                        subjective_summary.append(f"{k.capitalize()}: {last_ai_preds[k]['text']}")
+
+            objective_summary = []
+            for k in ["bloodPressure", "pulse", "respiratoryRate", "bodyTemperature"]:
+                if k in last_ai_preds:
+                    objective_summary.append(f"{k.capitalize()}: {last_ai_preds[k]['text']}")
+
+            clinical_assessment_summary = []
+            care_plan_summary = []
+
+            if api_type == "soap":
+                input_text = s3.get_json_file(s3_filename=file_path)
+                transcript = input_text.get("transcript")
+                interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
+            else:
+                interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
+
+            if interest_texts and len(" ".join(interest_texts).split()) >= 20:
+
+                triage_ai_preds_key = f"{conversation_id}/triage_ai_preds.json"
+                if s3.check_file_exists(triage_ai_preds_key):
+                    preds = s3.get_json_file(triage_ai_preds_key)
+                    triage_ai_preds = preds.get("ai_preds")
+
+                summaries = self.get_clinical_summaries_from_openai("\n".join(interest_texts), triage_ai_preds)
+
+                # subjective_summary
+                try:
+                    subjective_summary += nltk.sent_tokenize(summaries["subjectiveSummary"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (subjectiveSummary) ::  {e}")
+                    pass
+
+                subjective_summary = [
+                    line
+                    for line in subjective_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                # objective_summary
+                try:
+                    objective_summary += nltk.sent_tokenize(summaries["objectiveSummary"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (objectiveSummary) ::  {e}")
+                    pass
+
+                objective_summary = [
+                    line
+                    for line in objective_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                # clinical_assessment_summary
+                try:
+                    clinical_assessment_summary += nltk.sent_tokenize(
+                        summaries["clinicalAssessmentSummary"]
+                    )
+                except Exception as e:
+                    self.logger.error(f"NLTK error (clinicalAssessmentSummary) ::  {e}")
+                    pass
+
+                clinical_assessment_summary = [
+                    line
+                    for line in clinical_assessment_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                # care_plan_summary
+                try:
+                    care_plan_summary += nltk.sent_tokenize(summaries["carePlanSummary"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (carePlanSummary) ::  {e}")
+                    pass
+
+                care_plan_summary = [
+                    line
+                    for line in care_plan_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                data = {
+                    "subjectiveClinicalSummary": subjective_summary,
+                    "objectiveClinicalSummary": objective_summary,
+                    "clinicalAssessment": clinical_assessment_summary,
+                    "carePlanSuggested": care_plan_summary
+                }
+                s3.upload_to_s3(f"{conversation_id}/{conversation_id}_soap.json", data, is_json=True)
+                self.create_delivery_task(message=message)
+
+            else:
+                data = {
+                    "subjectiveClinicalSummary": subjective_summary,
+                    "objectiveClinicalSummary": objective_summary,
+                    "clinicalAssessment": clinical_assessment_summary,
+                    "carePlanSuggested": care_plan_summary
+                }
+                s3.upload_to_s3(f"{conversation_id}/{conversation_id}_soap.json", data, is_json=True)
+                self.create_delivery_task(message=message)
+
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred while generating SOAP summary ::  {e}")
+            data = {
+                "es_id": f"{conversation_id}_SOAP",
+                "chunk_no": chunk_no,
+                "file_path": file_path,
+                "webhook_url": webhook_url,
+                "api_path": api_path,
+                "api_type": api_type,
+                "req_type": req_type,
+                "executor_name": "SOAP_EXECUTOR",
+                "state": "Analytics",
+                "retry_count": retry_count,
+                "uid": None,
+                "request_id": conversation_id,
+                "care_req_id": conversation_id,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(start_time),
+                "end_time": str(datetime.utcnow()),
+            }
+            if retry_count <= 2:
+                retry_count += 1
+                data["retry_count"] = retry_count
+                producer.publish_executor_message(data)
+            else:
+                response_json = {"request_id": conversation_id,
+                                 "status": "Failed"}
+                merged_json_key = f"{conversation_id}/All_Preds.json"
+                s3.upload_to_s3(merged_json_key, response_json, is_json=True)
+                data["failed_state"] = "Analytics"
+                self.create_delivery_task(data)
 
     def get_subjective_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:

@@ -44,25 +44,26 @@ class Executor:
                                     logger.info(f"Starting SOAP for platform:: {stream_key} :: {file_path}")
 
                                 summary = soap()
-                                segments, last_ai_preds = summary.get_merge_ai_preds(conversation_id=stream_key,
-                                                                                     message=message_dict)
-                                futures = [
-                                    executor.submit(summary.get_subjective_summary, message_dict, start_time, segments,
-                                                    last_ai_preds
-                                                    ),
-                                    executor.submit(summary.get_objective_summary, message_dict, start_time, segments,
-                                                    last_ai_preds),
-                                    executor.submit(summary.get_clinical_assessment_summary, message_dict, start_time,
-                                                    segments,
-                                                    last_ai_preds),
-                                    executor.submit(summary.get_care_plan_summary, message_dict, start_time, segments,
-                                                    last_ai_preds)]
+                                executor.submit(summary.get_summary, message_dict, start_time)
 
-                                # Wait for all futures to complete for this message
-                                for future in as_completed(futures):
-                                    result = future.result()
-
-                                summary.create_delivery_task(message=message_dict)
+                                # segments, last_ai_preds = summary.get_merge_ai_preds(conversation_id=stream_key,
+                                #                                                      message=message_dict)
+                                # futures = [
+                                #     executor.submit(summary.get_subjective_summary, message_dict, start_time, segments,
+                                #                     last_ai_preds
+                                #                     ),
+                                #     executor.submit(summary.get_objective_summary, message_dict, start_time, segments,
+                                #                     last_ai_preds),
+                                #     executor.submit(summary.get_clinical_assessment_summary, message_dict, start_time,
+                                #                     segments,
+                                #                     last_ai_preds),
+                                #     executor.submit(summary.get_care_plan_summary, message_dict, start_time, segments,
+                                #                     last_ai_preds)]
+                                #
+                                # # Wait for all futures to complete for this message
+                                # for future in as_completed(futures):
+                                #     result = future.result()
+                                # summary.create_delivery_task(message=message_dict)
 
         except Exception as exc:
             msg = "post message polling failed :: {}".format(exc)

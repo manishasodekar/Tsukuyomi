@@ -344,36 +344,38 @@ class ASRExecutor:
                     "retry_count": 0
                     }
             s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
-
+            data = {
+                "es_id": f"{request_id}_ASR_EXECUTOR",
+                "file_path": file_path,
+                "webhook_url": webhook_url,
+                "api_path": api_path,
+                "api_type": api_type,
+                "req_type": "platform",
+                "executor_name": "ASR_EXECUTOR",
+                "state": "SpeechToText",
+                "retry_count": retry_count,
+                "uid": None,
+                "request_id": request_id,
+                "care_req_id": request_id,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(start_time),
+                "end_time": str(datetime.utcnow()),
+            }
             if retry_count <= 2:
                 retry_count += 1
-                data = {
-                    "es_id": f"{request_id}_ASR_EXECUTOR",
-                    "file_path": file_path,
-                    "webhook_url": webhook_url,
-                    "api_path": api_path,
-                    "api_type": api_type,
-                    "req_type": "platform",
-                    "executor_name": "ASR_EXECUTOR",
-                    "state": "SpeechToText",
-                    "retry_count": retry_count,
-                    "uid": None,
-                    "request_id": request_id,
-                    "care_req_id": request_id,
-                    "encounter_id": None,
-                    "provider_id": None,
-                    "review_provider_id": None,
-                    "completed": False,
-                    "exec_duration": 0.0,
-                    "start_time": str(start_time),
-                    "end_time": str(datetime.utcnow()),
-                }
+                data["retry_count"] = retry_count
                 producer.publish_executor_message(data)
             else:
                 response_json = {"request_id": request_id,
                                  "status": "Failed"}
                 merged_json_key = f"{request_id}/All_Preds.json"
                 s3.upload_to_s3(merged_json_key, response_json, is_json=True)
+                data["failed_state"] = "SpeechToText"
+                self.create_delivery_task(data)
 
             logger.error(f"An unexpected error occurred speechtotext {request_id} :: {ex}")
 

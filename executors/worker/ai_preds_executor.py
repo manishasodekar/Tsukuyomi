@@ -1,3 +1,4 @@
+import gc
 import json
 import logging
 import traceback
@@ -78,8 +79,31 @@ class aiPreds:
             if isinstance(value, dict) and "text" in value:
                 if value["text"] is None:
                     keys_to_delete.append(key)
+
             # Check if the value is an empty list in the 'entities' sub-dictionary
             elif key == "entities":
+                # removes value with empty code
+                for k, v in value.items():
+                    for i, _ in enumerate(v):
+                        if not _.get("code"):
+                            v.pop(i)
+                        else:
+                            if k == "diagnoses":
+                                if "ICD10CM" not in _.get("code"):
+                                    v.pop(i)
+                            elif k == "symptoms":
+                                if "HE" not in _.get("code"):
+                                    v.pop(i)
+                            elif k == "medications":
+                                if "NDC" not in _.get("code"):
+                                    v.pop(i)
+                            elif k == "surgeries":
+                                if "CPT" not in _.get("code"):
+                                    v.pop(i)
+                            elif k == "procedures":
+                                if "CPT" not in _.get("code"):
+                                    v.pop(i)
+                # removes null/[] entities
                 empty_keys = [k for k, v in value.items() if v == []]
                 for empty_key in empty_keys:
                     del value[empty_key]
@@ -87,12 +111,90 @@ class aiPreds:
                 empty_keys = [k for k, v in value.items() if v == []]
                 for empty_key in empty_keys:
                     del value[empty_key]
+                if not value:
+                    keys_to_delete.append(key)
 
         # Delete the keys from the main dictionary
         for key in keys_to_delete:
             del entities[key]
 
         return entities
+
+    # def clean_null_entries(self, entities):
+    #     # Directly remove entries where `text` is `None`
+    #     entities = {k: v for k, v in entities.items() if not (isinstance(v, dict) and v.get("text") is None)}
+    #     print("here1", entities )
+    #     # Function to filter valid items based on their code
+    #     def valid_item(item, prefix):
+    #         return item.get("code", "").startswith(prefix)
+    #
+    #     # Check and clean entities if exists
+    #     if "entities" in entities:
+    #         for key, items in entities["entities"].items():
+    #             prefix = {"diagnoses": "ICD10CM", "symptoms": "HE", "medications": "NDC", "surgeries": "CPT",
+    #                       "procedures": "CPT"}.get(key, "")
+    #             if prefix:
+    #                 # Keep items with valid codes
+    #                 entities["entities"][key] = [item for item in items if valid_item(item, prefix)]
+    #             else:
+    #                 # Remove items without a code or with an empty code
+    #                 entities["entities"][key] = [item for item in items if item.get("code")]
+    #
+    #             # Remove the key if the list is empty after filtering
+    #             if not entities["entities"][key]:
+    #                 del entities["entities"][key]
+    #     print("here2", entities )
+    #
+    #     # Clean summaries if exists
+    #     if "summaries" in entities:
+    #         entities["summaries"] = {k: v for k, v in entities["summaries"].items() if v != []}
+    #
+    #     print("here3", entities )
+    #
+    #     return entities
+
+    def merge_procedures_surgeries(self, ai_preds):
+        # merging surgeries into procedures
+        unique_procedures = {procedure["code"]: procedure for procedure in
+                             ai_preds["entities"].get("procedures", [])}
+        surgeries = ai_preds["entities"].get("surgeries", [])
+        for surgery in surgeries:
+            if surgery["code"] not in unique_procedures:
+                # This is not a duplicate, so add it to 'procedures'
+                ai_preds["entities"]["procedures"].append(surgery)
+                unique_procedures[surgery["code"]] = surgery
+        if "surgeries" in ai_preds["entities"]:
+            del ai_preds["entities"]["surgeries"]
+        del unique_procedures
+        del surgeries
+        return ai_preds
+
+    def merge_suggestions(self, ai_preds, triage_ai_suggestion):
+        # Ensure 'entities' key exists in ai_preds
+        if "entities" not in ai_preds:
+            ai_preds["entities"] = {}
+
+        for key, suggestions in triage_ai_suggestion.items():
+            # Initialize the key in ai_preds["entities"] if it doesn't exist
+            if key not in ai_preds["entities"]:
+                ai_preds["entities"][key] = []
+
+            for suggestion in suggestions:
+                found_duplicate = False
+                for ai_pred in ai_preds["entities"].get(key, []):
+                    # If a duplicate code is found in ai_preds, update its source field
+                    if ai_pred["code"] == suggestion["code"]:
+                        if ai_pred["source"] == ["triage"]:
+                            ai_pred["source"] = ["triage"]
+                        else:
+                            ai_pred["source"] = ["ai_suggestions", "triage"]
+                        found_duplicate = True
+                        break  # Stop searching once a duplicate is found
+
+                if not found_duplicate:
+                    # If the code is unique, add the suggestion to ai_preds with its original source
+                    ai_preds["entities"][key].append({**suggestion, "source": ["triage"]})
+        return ai_preds
 
     def execute_function(self, message, start_time):
         try:
@@ -105,6 +207,7 @@ class aiPreds:
             api_type = message.get("api_type")
             api_path = message.get("api_path")
             triage_ai_preds = None
+            triage_ai_suggestion = None
             text = None
             merged_segments = []
             conversation_datas = None
@@ -142,10 +245,8 @@ class aiPreds:
                 "entities": {
                     "medications": [],
                     "symptoms": [],
-                    "diseases": [],
                     "diagnoses": [],
-                    "surgeries": [],
-                    "tests": [],
+                    "procedures": [],
                 },
                 "summaries": {
                     "subjectiveClinicalSummary": [],
@@ -162,12 +263,12 @@ class aiPreds:
             if merged_segments or text:
                 if merged_segments:
                     text = " ".join([_["text"] for _ in merged_segments])
-                triage_ai_preds_key = f"{conversation_id}/triage_ai_preds.json"
-                if s3.check_file_exists(triage_ai_preds_key):
-                    preds = s3.get_json_file(triage_ai_preds_key)
-                    triage_ai_preds = preds.get("ai_preds")
 
-                extracted_info = self.get_preds_from_open_ai(text, triage_ai_preds)
+                triage_key = f"{conversation_id}/triage_ai_suggestion.json"
+                if s3.check_file_exists(triage_key):
+                    triage_ai_suggestion = s3.get_json_file(triage_key)
+
+                extracted_info = self.get_preds_from_open_ai(text)
                 extracted_info = self.clean_pred(extracted_info)
 
                 details = extracted_info.get("details", {})
@@ -182,7 +283,7 @@ class aiPreds:
                             entities[k]["value"] = entities[k]["text"]
 
                 all_texts_and_types = []
-                for k in ["medications", "symptoms", "diseases", "diagnoses", "surgeries", "tests"]:
+                for k in ["medications", "symptoms", "diagnoses", "surgeries", "tests"]:
                     if isinstance(extracted_info.get(k), str):
                         v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
                         for _ in v:
@@ -207,7 +308,7 @@ class aiPreds:
                     for (text, _type), code in zip(all_texts_and_types, codes):
                         text_to_codes[text] = {"name": code["name"], "code": code["code"], "score": code.get("score")}
 
-                for k in ["medications", "symptoms", "diseases", "diagnoses", "surgeries", "tests"]:
+                for k in ["medications", "symptoms", "diagnoses", "surgeries", "tests"]:
                     if isinstance(extracted_info.get(k), str):
                         v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
                         v = [
@@ -217,11 +318,15 @@ class aiPreds:
                                 "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
                                 "code_type": "",
                                 "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
+                                "source": ["ai_suggestions"]
                             }
                             for _ in v
                             if _.strip()
                         ]
-                        entities["entities"][k] = v
+                        if k == "tests":
+                            entities["entities"]["procedures"] = v
+                        else:
+                            entities["entities"][k] = v
                     elif isinstance(extracted_info.get(k), list):
                         v = extracted_info.get(k, "")
                         val = [
@@ -231,19 +336,26 @@ class aiPreds:
                                 "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
                                 "code_type": "",
                                 "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
+                                "source": ["ai_suggestions"]
                             }
                             for _ in v
                             if _.strip()
                         ]
-                        entities["entities"][k] = val
+                        if k == "tests":
+                            entities["entities"]["procedures"] = val
+                        else:
+                            entities["entities"][k] = val
 
                 # if entities:
                 #     current_segment["ai_preds"] = entities
                 # else:
                 #     current_segment["ai_preds"] = None
-
                 entities = self.clean_null_entries(entities)
+                entities = self.merge_procedures_surgeries(entities)
+                if triage_ai_suggestion:
+                    entities = self.merge_suggestions(entities, triage_ai_suggestion)
                 s3.upload_to_s3(f"{conversation_id}/ai_preds.json", entities, is_json=True)
+
                 if api_type in {"clinical_notes", "soap"}:
                     data = {
                         "es_id": f"{conversation_id}_SOAP",
@@ -324,6 +436,10 @@ class aiPreds:
 
         # Process each line
         for line in lines:
+            if "{" in line:
+                continue
+            if "}" in line:
+                continue
             # Split the line into key and value
             key, value = line.split(': ')
 
@@ -363,7 +479,6 @@ class aiPreds:
 
     def get_preds_from_open_ai(self,
                                transcript_text,
-                               triage_ai_preds,
                                function_list=heconstants.faster_clinical_info_extraction_functions,
                                min_length=30,
                                ):
@@ -375,7 +490,6 @@ class aiPreds:
             template = """
             "medications": <text>,
             "symptoms": <text>,
-            "diseases": <text>,
             "diagnoses": <text>,
             "surgeries": <text>,
             "orders": <text>,
@@ -391,43 +505,49 @@ class aiPreds:
             "bodyTemperature_fahrenheit": <text>
             """
 
-            if triage_ai_preds or triage_ai_preds != "":
-                messages = [
-                    {
-                        "role": "system",
-                        "content": """Don't make assumptions about what values to plug into functions. return not 
-                        found if you can't find the information. You are acting as an expert clinical entity 
-                        extractor. Extract the described information from given clinical notes, consultation 
-                        transcript or PATIENT PROVIDER CONVERSATION, including AI TRIAGE CONVERSATION. No 
-                        extra information or hypothesis not present in the given text should be added. Separate items 
-                        with , wherever needed. All the text returned should be present in the given TEXT. no new 
-                        text should be returned.""",
-                    },
-                    {
-                        "role": "system",
-                        "content": f"Use given template to return the response : {template}",
-                    },
-                    {"role": "user", "content": f"AI TRIAGE CONVERSATION:\n {triage_ai_preds} \n\nPATIENT PROVIDER "
-                                                f"CONVERSATION:\n {transcript_text}"},
-                ]
+            # if triage_ai_preds:
+            #     messages = [
+            #         {
+            #             "role": "system",
+            #             "content": """Don't make assumptions about what values to plug into functions. return not
+            #             found if you can't find the information. You are acting as an expert clinical entity
+            #             extractor. Extract the described information from given clinical notes, consultation
+            #             transcript or PATIENT PROVIDER CONVERSATION, including AI TRIAGE CONVERSATION. No
+            #             extra information or hypothesis not present in the given text should be added. Separate items
+            #             with , wherever needed. All the text returned should be present in the given TEXT. no new
+            #             text should be returned.""",
+            #         },
+            #         {
+            #             "role": "system",
+            #             "content": f"Use given template to return the response : {template}",
+            #         },
+            #         {"role": "user", "content": f"AI TRIAGE CONVERSATION:\n {triage_ai_preds} \n\nPATIENT PROVIDER "
+            #                                     f"CONVERSATION:\n {transcript_text}"},
+            #     ]
+            # else:
 
-            else:
-                messages = [
-                    {
-                        "role": "system",
-                        "content": """Don't make assumptions about what values to plug into functions. return not 
-                        found if you can't find the information. You are acting as an expert clinical entity 
-                        extractor. Extract the described information from given clinical notes, consultation 
-                        transcript or PATIENT PROVIDER CONVERSATION. No extra information or hypothesis not present 
-                        in the given text should be added. Separate items with , wherever needed. All the text 
-                        returned should be present in the given TEXT. no new text should be returned.""",
-                    },
-                    {
-                        "role": "system",
-                        "content": f"Use given template to return the response : {template}",
-                    },
-                    {"role": "user", "content": f"PATIENT PROVIDER CONVERSATION:\n {transcript_text}"},
-                ]
+            messages = [
+                {
+                    "role": "system",
+                    "content": """Don't make assumptions about what values to plug into functions. return not 
+                                    found if you can't find the information. You are acting as an expert clinical entity 
+                                    extractor. Extract the described information from given clinical notes, consultation 
+                                    transcript or PATIENT PROVIDER CONVERSATION. No extra information or hypothesis not present 
+                                    in the given text should be added. Separate items with , wherever needed. All the text 
+                                    returned should be present in the given TEXT. no new text should be returned.""",
+                },
+                {
+                    "role": "system",
+                    "content": """Return not found if you can't find the information for mentioned fields with expected 
+                    type : age_years (years), gender (male or female), height_cm (cm), weight_kg (kg), 
+                    and substanceAbuse (yes or no)""",
+                },
+                {
+                    "role": "system",
+                    "content": f"Use given template to return text response : {template}",
+                },
+                {"role": "user", "content": f"PATIENT PROVIDER CONVERSATION:\n {transcript_text}"},
+            ]
 
             for model_name in ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]:
                 try:
@@ -438,10 +558,10 @@ class aiPreds:
                         # function_call={"name": "ClinicalInformation"},
                         temperature=0.6,
                     )
-
                     extracted_info = response.choices[0]["message"]["content"]
+                    print(extracted_info)
                     converted_info = self.string_to_dict(extracted_info)
-                    logger.info(f"extracted_info :: {converted_info}")
+                    logger.info(f"converted_info :: {converted_info}")
                     # extracted_info = json.loads(
                     #     response.choices[0]["message"]["function_call"]["arguments"]
                     # )

@@ -108,14 +108,18 @@ class finalExecutor:
 
                     if s3.check_file_exists(ai_preds_file_path):
                         merged_ai_preds = s3.get_json_file(ai_preds_file_path)
-                        for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary",
-                                             "clinicalAssessment",
-                                             "carePlanSuggested"]:
-                            summary_file = f"{request_id}/{summary_type}.json"
-                            if s3.check_file_exists(summary_file):
-                                summary_content = s3.get_json_file(s3_filename=summary_file)
-                                if summary_content:
-                                    merged_ai_preds["summaries"][summary_type] = summary_content
+                        summary_file = f"{request_id}/{request_id}_soap.json"
+                        if s3.check_file_exists(summary_file):
+                            summary_content = s3.get_json_file(s3_filename=summary_file)
+                            if summary_content:
+                                summary = {
+                                    "summaries": {}
+                                }
+                                for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary",
+                                                     "clinicalAssessment",
+                                                     "carePlanSuggested"]:
+                                    summary["summaries"][summary_type] = summary_content.get(summary_type)
+                                merged_ai_preds.update(summary)
 
                         if api_type in {"clinical_notes", "ai_pred"}:
                             response_json["ai_preds"] = merged_ai_preds

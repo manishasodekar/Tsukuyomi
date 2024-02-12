@@ -50,10 +50,8 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
             "entities": {
                 "medications": [],
                 "symptoms": [],
-                "diseases": [],
                 "diagnoses": [],
-                "surgeries": [],
-                "tests": [],
+                "procedures": [],
             },
             "summaries": {
                 "subjectiveClinicalSummary": [],
@@ -63,7 +61,6 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
             },
         }
         response_json = {}
-        ai_preds_file_path = f"{conversation_id}/ai_preds.json"
 
         conversation_datas = s3.get_files_matching_pattern(
             pattern=f"{conversation_id}/{conversation_id}_*json")
@@ -83,16 +80,21 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
                 response_json["segments"] = merged_segments
 
             if not only_transcribe:
+                ai_preds_file_path = f"{conversation_id}/ai_preds.json"
                 if s3.check_file_exists(ai_preds_file_path):
                     merged_ai_preds = s3.get_json_file(ai_preds_file_path)
-                    for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary", "clinicalAssessment",
-                                         "carePlanSuggested"]:
-                        summary_file = f"{conversation_id}/{summary_type}.json"
-                        if s3.check_file_exists(summary_file):
-                            summary_content = s3.get_json_file(s3_filename=summary_file)
-                            if summary_content:
-                                merged_ai_preds["summaries"][summary_type] = summary_content
-
+                    summary_file = f"{conversation_id}/{conversation_id}_soap.json"
+                    if s3.check_file_exists(summary_file):
+                        summary_content = s3.get_json_file(s3_filename=summary_file)
+                        if summary_content:
+                            summary = {
+                                "summaries": {}
+                            }
+                            for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary",
+                                                 "clinicalAssessment",
+                                                 "carePlanSuggested"]:
+                                summary["summaries"][summary_type] = summary_content.get(summary_type)
+                            merged_ai_preds.update(summary)
                     response_json["ai_preds"] = merged_ai_preds
 
             response_json["meta"] = audio_metas

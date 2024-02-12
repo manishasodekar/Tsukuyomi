@@ -173,19 +173,21 @@ def websocket_handler(env, start_response):
                 connection_id, user_type, ws
             )
 
-
         logger.info(f"SENDING EMPTY AI PREDS TO WS :: {ws}")
-        ws.send(
-            json.dumps(
-                {
-                    "success": True,
-                    "uid": uid,
-                    "segments": [],
-                    "ai_preds": {},
-                    "triage_ai_suggestion": triage_ai_suggestion,
-                }
-            )
-        )
+
+        message = {
+            "success": True,
+            "uid": uid,
+            "segments": [],
+            "ai_preds": {}
+        }
+
+        # Modify 'ai_preds' only if 'triage_ai_suggestion' is available
+        if triage_ai_suggestion:
+            message["ai_preds"] = {"entities": triage_ai_suggestion}
+
+        # Send the JSON message through the WebSocket connection
+        ws.send(json.dumps(message))
 
         last_preds_sent_at = time.time()
         last_trans_sent_at = time.time()
