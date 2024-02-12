@@ -140,7 +140,10 @@ def create_task(request_id, webhook_url, audio_url, api_type):
         "end_time": str(datetime.utcnow()),
     }
     producer.publish_executor_message(data)
-
+    response_json = {"request_id": request_id,
+                     "status": "Inprogress"}
+    merged_json_key = f"{request_id}/All_Preds.json"
+    s3.upload_to_s3(merged_json_key, response_json, is_json=True)
     return {
         "success": True,
         "request_id": request_id
@@ -182,7 +185,10 @@ def create_aipred_task(request_id, webhook_url, text, api_type):
         "end_time": str(datetime.utcnow()),
     }
     producer.publish_executor_message(data)
-
+    response_json = {"request_id": request_id,
+                     "status": "Inprogress"}
+    merged_json_key = f"{request_id}/All_Preds.json"
+    s3.upload_to_s3(merged_json_key, response_json, is_json=True)
     return {
         "success": True,
         "request_id": request_id
@@ -260,10 +266,34 @@ class Status(object):
     def on_get(self, req, resp):
         request_id = req.params.get("request_id")
         file_path = f"{request_id}/All_Preds.json"
+        resp.set_header('Request-ID', request_id)
         if s3.check_file_exists(file_path):
             merged_ai_preds = s3.get_json_file(file_path)
-            resp.set_header('Request-ID', request_id)
-            resp.media = merged_ai_preds
+            if merged_ai_preds:
+                status = merged_ai_preds.get("status")
+                if status:
+                    if status == "Completed":
+                        success = merged_ai_preds.get("success")
+                        del merged_ai_preds['status']
+                        del merged_ai_preds['success']
+                        del merged_ai_preds['request_id']
+                        resp.media = {"request_id": request_id,
+                                      "status": status,
+                                      "results": merged_ai_preds,
+                                      "success": success}
+                    elif status == "Inprogress":
+                        resp.media = {
+                            "request_id": request_id,
+                            "status": status
+                        }
+                    else:
+                        resp.media = {"success": False,
+                                      "request_id": request_id,
+                                      "issue": [{
+                                          "error-code": "HE-101",
+                                          "message": "Failed to process the request."
+                                      }]
+                                      }
         else:
             resp.media = {"success": False,
                           "request_id": request_id,
@@ -295,9 +325,9 @@ status = Status()
 app.add_route("/home", home)
 app.add_route("/history", history_api)
 app.add_route("/clinical_notes", clinical_notes_api)
-app.add_route("/transcription", transcription_api)
-app.add_route("/ai_pred", ai_pred_api)
-app.add_route("/soap", soap_api)
+app.add_route("/clinical_transcription", transcription_api)
+app.add_route("/cpoe_assist", ai_pred_api)
+app.add_route("/soap_summary", soap_api)
 app.add_route("/status", status)
 
 if __name__ == "__main__":

@@ -369,6 +369,11 @@ class ASRExecutor:
                     "end_time": str(datetime.utcnow()),
                 }
                 producer.publish_executor_message(data)
+            else:
+                response_json = {"request_id": request_id,
+                                 "status": "Failed"}
+                merged_json_key = f"{request_id}/All_Preds.json"
+                s3.upload_to_s3(merged_json_key, response_json, is_json=True)
 
             logger.error(f"An unexpected error occurred speechtotext {request_id} :: {ex}")
 

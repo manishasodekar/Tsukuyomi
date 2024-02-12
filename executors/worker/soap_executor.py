@@ -308,6 +308,10 @@ class soap:
 
             print(data)
         except Exception as e:
+            response_json = {"request_id": conversation_id,
+                             "status": "Failed"}
+            merged_json_key = f"{conversation_id}/All_Preds.json"
+            s3.upload_to_s3(merged_json_key, response_json, is_json=True)
             self.logger.error(f"An unexpected error occurred while generating subjectiveClinicalSummary ::  {e}")
 
     def get_objective_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
@@ -359,6 +363,10 @@ class soap:
             print(data)
 
         except Exception as e:
+            response_json = {"request_id": conversation_id,
+                             "status": "Failed"}
+            merged_json_key = f"{conversation_id}/All_Preds.json"
+            s3.upload_to_s3(merged_json_key, response_json, is_json=True)
             self.logger.error(f"An unexpected error occurred while generating  objectiveClinicalSummary ::  {e}")
 
     def get_clinical_assessment_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
@@ -409,6 +417,10 @@ class soap:
             print(data)
 
         except Exception as e:
+            response_json = {"request_id": conversation_id,
+                             "status": "Failed"}
+            merged_json_key = f"{conversation_id}/All_Preds.json"
+            s3.upload_to_s3(merged_json_key, response_json, is_json=True)
             self.logger.error(f"An unexpected error occurred while generating clinicalAssessment ::  {e}")
 
     def get_care_plan_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
@@ -454,6 +466,10 @@ class soap:
                                 is_json=True)
             print(data)
         except Exception as e:
+            response_json = {"request_id": conversation_id,
+                             "status": "Failed"}
+            merged_json_key = f"{conversation_id}/All_Preds.json"
+            s3.upload_to_s3(merged_json_key, response_json, is_json=True)
             self.logger.error(f"An unexpected error occurred while generating carePlanSuggested ::  {e}")
 
     def create_delivery_task(self, message):
@@ -495,32 +511,6 @@ class soap:
             msg = "Failed to create delivery task :: {}".format(exc)
             trace = traceback.format_exc()
             logger.error(msg, trace)
-
-            if retry_count <= 2:
-                retry_count += 1
-                data = {
-                    "es_id": f"{request_id}_FINAL_EXECUTOR",
-                    "chunk_no": chunk_no,
-                    "file_path": file_path,
-                    "webhook_url": webhook_url,
-                    "api_path": api_path,
-                    "api_type": api_type,
-                    "req_type": req_type,
-                    "executor_name": "FINAL_EXECUTOR",
-                    "state": "Final",
-                    "retry_count": retry_count,
-                    "uid": None,
-                    "request_id": request_id,
-                    "care_req_id": request_id,
-                    "encounter_id": None,
-                    "provider_id": None,
-                    "review_provider_id": None,
-                    "completed": False,
-                    "exec_duration": 0.0,
-                    "start_time": str(datetime.utcnow()),
-                    "end_time": str(datetime.utcnow()),
-                }
-                producer.publish_executor_message(data)
 
 # if __name__ == "__main__":
 #     soap_exe = soap()
