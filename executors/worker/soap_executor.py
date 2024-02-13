@@ -400,7 +400,7 @@ class soap:
                     "clinicalAssessment": clinical_assessment_summary,
                     "carePlanSuggested": care_plan_summary
                 }
-                s3.upload_to_s3(f"{conversation_id}/{conversation_id}_soap.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
                 self.create_delivery_task(message=message)
 
             else:
@@ -410,7 +410,7 @@ class soap:
                     "clinicalAssessment": clinical_assessment_summary,
                     "carePlanSuggested": care_plan_summary
                 }
-                s3.upload_to_s3(f"{conversation_id}/{conversation_id}_soap.json", data, is_json=True)
+                s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
                 self.create_delivery_task(message=message)
 
         except Exception as e:

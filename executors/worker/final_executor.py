@@ -108,7 +108,7 @@ class finalExecutor:
 
                     if s3.check_file_exists(ai_preds_file_path):
                         merged_ai_preds = s3.get_json_file(ai_preds_file_path)
-                        summary_file = f"{request_id}/{request_id}_soap.json"
+                        summary_file = f"{request_id}/soap.json"
                         if s3.check_file_exists(summary_file):
                             summary_content = s3.get_json_file(s3_filename=summary_file)
                             if summary_content:

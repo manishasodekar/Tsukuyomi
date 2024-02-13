@@ -83,7 +83,7 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
                 ai_preds_file_path = f"{conversation_id}/ai_preds.json"
                 if s3.check_file_exists(ai_preds_file_path):
                     merged_ai_preds = s3.get_json_file(ai_preds_file_path)
-                    summary_file = f"{conversation_id}/{conversation_id}_soap.json"
+                    summary_file = f"{conversation_id}/soap.json"
                     if s3.check_file_exists(summary_file):
                         summary_content = s3.get_json_file(s3_filename=summary_file)
                         if summary_content:
