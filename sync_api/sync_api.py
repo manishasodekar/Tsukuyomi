@@ -114,7 +114,7 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
         logger.error(msg, trace)
 
 
-def create_task(request_id, webhook_url, audio_url, api_type):
+def create_task(request_id, webhook_url, audio_url, api_type, clinical_ner_flag):
     es_id = f"{request_id}_FILE_DOWNLOADER"
     executor_name = "FILE_DOWNLOADER"
     state = "Init"
@@ -123,7 +123,7 @@ def create_task(request_id, webhook_url, audio_url, api_type):
         "es_id": es_id,
         "webhook_url": webhook_url,
         "file_path": audio_url,
-        "api_path": f"/{api_type}",
+        "api_path": f"/{api_type}" if not clinical_ner_flag else f"/{api_type}[clinical_ner]",
         "api_type": api_type,
         "req_type": "platform",
         "user_type": "Provider",
@@ -152,7 +152,7 @@ def create_task(request_id, webhook_url, audio_url, api_type):
     }
 
 
-def create_aipred_task(request_id, webhook_url, text, api_type):
+def create_aipred_task(request_id, webhook_url, text, api_type, clinical_ner_flag):
     if api_type == "ai_pred":
         es_id = f"{request_id}_AI_PRED"
         executor_name = "AI_PRED"
@@ -168,7 +168,7 @@ def create_aipred_task(request_id, webhook_url, text, api_type):
         "es_id": es_id,
         "webhook_url": webhook_url,
         "file_path": file_key,
-        "api_path": f"/{api_type}",
+        "api_path": f"/{api_type}" if not clinical_ner_flag else f"/{api_type}[clinical_ner]",
         "api_type": api_type,
         "req_type": "platform",
         "user_type": "Provider",
@@ -214,31 +214,39 @@ class clinicalNotes(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
         audio_url = req.params.get("audio_url")
+        clinical_ner = req.params.get("clinical_ner", "false")
+        clinical_ner = clinical_ner.lower() == 'true'
         if audio_url is None:
             self.logger.error("audio_url query parameter is missing.")
             raise falcon.HTTPError(status=400, description="Audio url is missing.")
         request_id = generate_request_id()
         resp.set_header('Request_ID', request_id)
         resp.set_header('WEBHOOK_URL', webhook_url)
-        resp.media = create_task(request_id, webhook_url, audio_url, api_type="clinical_notes")
+        resp.media = create_task(request_id, webhook_url, audio_url, api_type="clinical_notes",
+                                 clinical_ner_flag=clinical_ner)
 
 
 class Transcription(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
-        audio_url = req.params.get("audio_url")
+        audio_url = req.params.get("audio_url", "False")
+        clinical_ner = req.params.get("clinical_ner", "false")
+        clinical_ner = clinical_ner.lower() == 'true'
         if audio_url is None:
             self.logger.error("audio_url query parameter is missing.")
             raise falcon.HTTPError(status=400, description="Audio url is missing.")
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_task(request_id, webhook_url, audio_url, api_type="transcription")
+        resp.media = create_task(request_id, webhook_url, audio_url, api_type="transcription",
+                                 clinical_ner_flag=clinical_ner)
 
 
 class AiPred(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
+        clinical_ner = req.params.get("clinical_ner", "false")
+        clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
         if text is None:
@@ -247,12 +255,15 @@ class AiPred(object):
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_aipred_task(request_id, webhook_url, text, api_type="ai_pred")
+        resp.media = create_aipred_task(request_id, webhook_url, text, api_type="ai_pred",
+                                        clinical_ner_flag=clinical_ner)
 
 
 class Summary(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
+        clinical_ner = req.params.get("clinical_ner", "false")
+        clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
         if text is None:
@@ -261,7 +272,8 @@ class Summary(object):
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_aipred_task(request_id, webhook_url, text, api_type="soap")
+        resp.media = create_aipred_task(request_id, webhook_url, text, api_type="soap",
+                                        clinical_ner_flag=clinical_ner)
 
 
 class Status(object):
