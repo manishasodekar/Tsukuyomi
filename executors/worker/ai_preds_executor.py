@@ -350,25 +350,32 @@ class aiPreds:
                 else:
                     extracted_info = self.get_preds_from_clinicl_ner(text)
                     if extracted_info:
-                        for k in ["medication", "symptom", "diagnoses", "surgeries", "procedures"]:
-                            values_list = extracted_info.get(k, [])
-                            if values_list:
-                                if k == "symptom":
-                                    k = "symptoms"
-                                elif k == "medication":
-                                    k = "medications"
-
-                                entities["entities"][k] = [
-                                    {
-                                        "text": val.get("text"),
-                                        "code": val.get("code"),
-                                        "code_value": val.get("code_value"),
-                                        "code_type": val.get("type"),
-                                        "confidence": val.get("confidence"),
-                                        "source": ["ai_suggestions"]
-                                    }
-                                    for val in values_list
-                                ]
+                        for k in ["medication", "symptom", "diagnoses", "surgeries", "procedures", "age", "gender"]:
+                            if isinstance(extracted_info.get(k), str):
+                                value = extracted_info.get(k, None)
+                                entities[k] = {
+                                    "text": value,
+                                    "value": value,
+                                    "unit": None
+                                }
+                            elif isinstance(extracted_info.get(k), list):
+                                values_list = extracted_info.get(k, [])
+                                if values_list:
+                                    if k == "symptom":
+                                        k = "symptoms"
+                                    elif k == "medication":
+                                        k = "medications"
+                                    entities["entities"][k] = [
+                                        {
+                                            "text": val.get("text"),
+                                            "code": val.get("code"),
+                                            "code_value": val.get("code_value"),
+                                            "code_type": val.get("type"),
+                                            "confidence": val.get("confidence"),
+                                            "source": ["ai_suggestions"]
+                                        }
+                                        for val in values_list
+                                    ]
 
                 # if entities:
                 #     current_segment["ai_preds"] = entities
@@ -515,6 +522,12 @@ class aiPreds:
             if response.status_code == 200:
                 response = json.loads(response.text)
                 entities = response.get("results_grouped_by_type")
+                age = response.get("realage")
+                if age:
+                    entities["age"] = age
+                gender = response.get("gender")
+                if gender:
+                    entities["gender"] = gender
                 if entities:
                     return entities
             else:
