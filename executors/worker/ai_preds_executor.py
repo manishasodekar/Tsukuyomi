@@ -305,82 +305,82 @@ class aiPreds:
                 if "clinical_ner" not in api_path:
                     extracted_info = self.get_preds_from_open_ai(text)
                     extracted_info = self.clean_pred(extracted_info)
+                    if extracted_info:
+                        details = extracted_info.get("details", {})
+                        if details:
+                            for k, v in details.items():
+                                if k in entities:
+                                    if entities[k]["text"] is None:
+                                        entities[k]["text"] = v
+                                    # else:
+                                    #     entities[k]["text"] += ", " + v
 
-                    details = extracted_info.get("details", {})
-                    if details:
-                        for k, v in details.items():
-                            if k in entities:
-                                if entities[k]["text"] is None:
-                                    entities[k]["text"] = v
-                                # else:
-                                #     entities[k]["text"] += ", " + v
+                                    entities[k]["value"] = entities[k]["text"]
 
-                                entities[k]["value"] = entities[k]["text"]
-
-                    all_texts_and_types = []
-                    for k in ["medications", "symptoms", "diagnoses", "surgeries", "tests"]:
-                        if isinstance(extracted_info.get(k), str):
-                            v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
-                            for _ in v:
-                                if _.strip():
+                        all_texts_and_types = []
+                        for k in ["medications", "symptoms", "diagnoses", "surgeries", "tests"]:
+                            if isinstance(extracted_info.get(k), str):
+                                v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
+                                for _ in v:
+                                    if _.strip():
+                                        all_texts_and_types.append((_.strip(), k))
+                            elif isinstance(extracted_info.get(k), list):
+                                v = extracted_info.get(k, "")
+                                for _ in v:
                                     all_texts_and_types.append((_.strip(), k))
-                        elif isinstance(extracted_info.get(k), list):
-                            v = extracted_info.get(k, "")
-                            for _ in v:
-                                all_texts_and_types.append((_.strip(), k))
 
-                    text_to_codes = {}
+                        text_to_codes = {}
 
-                    if all_texts_and_types:
-                        try:
-                            codes = \
-                                requests.post(heconstants.AI_SERVER + "/code_search/infer",
-                                              json=all_texts_and_types).json()[
-                                    'prediction']
-                        except:
-                            codes = [{"name": _, "code": None} for _ in all_texts_and_types]
+                        if all_texts_and_types:
+                            try:
+                                codes = \
+                                    requests.post(heconstants.AI_SERVER + "/code_search/infer",
+                                                  json=all_texts_and_types).json()[
+                                        'prediction']
+                            except:
+                                codes = [{"name": _, "code": None} for _ in all_texts_and_types]
 
-                        for (text, _type), code in zip(all_texts_and_types, codes):
-                            text_to_codes[text] = {"name": code["name"], "code": code["code"],
-                                                   "score": code.get("score")}
+                            for (text, _type), code in zip(all_texts_and_types, codes):
+                                text_to_codes[text] = {"name": code["name"], "code": code["code"],
+                                                       "score": code.get("score")}
 
-                    for k in ["medications", "symptoms", "diagnoses", "surgeries", "tests"]:
-                        if isinstance(extracted_info.get(k), str):
-                            v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
-                            v = [
-                                {
-                                    "text": _.strip(),
-                                    "code": text_to_codes.get(_.strip(), {}).get("code", None),
-                                    "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
-                                    "code_type": "",
-                                    "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
-                                    "source": ["ai_suggestions"]
-                                }
-                                for _ in v
-                                if _.strip()
-                            ]
-                            if k == "tests":
-                                entities["entities"]["procedures"] = v
-                            else:
-                                entities["entities"][k] = v
-                        elif isinstance(extracted_info.get(k), list):
-                            v = extracted_info.get(k, "")
-                            val = [
-                                {
-                                    "text": _.strip(),
-                                    "code": text_to_codes.get(_.strip(), {}).get("code", None),
-                                    "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
-                                    "code_type": "",
-                                    "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
-                                    "source": ["ai_suggestions"]
-                                }
-                                for _ in v
-                                if _.strip()
-                            ]
-                            if k == "tests":
-                                entities["entities"]["procedures"] = val
-                            else:
-                                entities["entities"][k] = val
+                        for k in ["medications", "symptoms", "diagnoses", "surgeries", "tests"]:
+                            if isinstance(extracted_info.get(k), str):
+                                v = extracted_info.get(k, "").replace(" and ", " , ").split(",")
+                                v = [
+                                    {
+                                        "text": _.strip(),
+                                        "code": text_to_codes.get(_.strip(), {}).get("code", None),
+                                        "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
+                                        "code_type": "",
+                                        "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
+                                        "source": ["ai_suggestions"]
+                                    }
+                                    for _ in v
+                                    if _.strip()
+                                ]
+                                if k == "tests":
+                                    entities["entities"]["procedures"] = v
+                                else:
+                                    entities["entities"][k] = v
+                            elif isinstance(extracted_info.get(k), list):
+                                v = extracted_info.get(k, "")
+                                val = [
+                                    {
+                                        "text": _.strip(),
+                                        "code": text_to_codes.get(_.strip(), {}).get("code", None),
+                                        "code_value": text_to_codes.get(_.strip(), {}).get("name", None),
+                                        "code_type": "",
+                                        "confidence": text_to_codes.get(_.strip(), {}).get("score", None),
+                                        "source": ["ai_suggestions"]
+                                    }
+                                    for _ in v
+                                    if _.strip()
+                                ]
+                                if k == "tests":
+                                    entities["entities"]["procedures"] = val
+                                else:
+                                    entities["entities"][k] = val
                 else:
                     extracted_info = self.get_preds_from_clinicl_ner(text)
                     if extracted_info:
