@@ -302,7 +302,7 @@ class aiPreds:
                 if s3.check_file_exists(triage_key):
                     triage_ai_suggestion = s3.get_json_file(triage_key)
 
-                if "clinical_ner" not in api_path:
+                if "clinical_ner" in api_path:
                     extracted_info = self.get_preds_from_open_ai(text)
                     extracted_info = self.clean_pred(extracted_info)
                     if extracted_info:
