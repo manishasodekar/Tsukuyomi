@@ -154,47 +154,81 @@ class aiPreds:
     #     return entities
 
     def merge_procedures_surgeries(self, ai_preds):
-        # merging surgeries into procedures
-        unique_procedures = {procedure["code"]: procedure for procedure in
-                             ai_preds["entities"].get("procedures", [])}
-        surgeries = ai_preds["entities"].get("surgeries", [])
-        for surgery in surgeries:
-            if surgery["code"] not in unique_procedures:
-                # This is not a duplicate, so add it to 'procedures'
-                ai_preds["entities"]["procedures"].append(surgery)
-                unique_procedures[surgery["code"]] = surgery
-        if "surgeries" in ai_preds["entities"]:
-            del ai_preds["entities"]["surgeries"]
-        del unique_procedures
-        del surgeries
-        return ai_preds
+        try:
+
+            # merging surgeries into procedures
+            unique_procedures = {procedure["code"]: procedure for procedure in
+                                 ai_preds["entities"].get("procedures", [])}
+            surgeries = ai_preds["entities"].get("surgeries", [])
+            for surgery in surgeries:
+                if surgery["code"] not in unique_procedures:
+                    # This is not a duplicate, so add it to 'procedures'
+                    ai_preds["entities"]["procedures"].append(surgery)
+                    unique_procedures[surgery["code"]] = surgery
+            if "surgeries" in ai_preds["entities"]:
+                del ai_preds["entities"]["surgeries"]
+            del unique_procedures
+            del surgeries
+            return ai_preds
+
+        except Exception as exc:
+            msg = "Failed to get merge_procedures_surgeries :: {}".format(exc)
+            trace = traceback.format_exc()
+            logger.error(msg, trace)
+
+    def remove_duplicates_ai_preds(self, ai_preds):
+        try:
+            # Remove duplicates based on "code" from all keys in ai_preds["entities"]
+            for key in ai_preds["entities"]:
+                # Create a new list with unique codes
+                unique_entities = []
+                codes_seen = set()
+                for entity in ai_preds["entities"][key]:
+                    if entity["code"] not in codes_seen:
+                        unique_entities.append(entity)
+                        codes_seen.add(entity["code"])
+                # Update the list with the unique items
+                ai_preds["entities"][key] = unique_entities
+
+            return ai_preds
+
+        except Exception as exc:
+            msg = "Failed to get merge_ai_preds :: {}".format(exc)
+            trace = traceback.format_exc()
+            logger.error(msg, trace)
 
     def merge_suggestions(self, ai_preds, triage_ai_suggestion):
-        # Ensure 'entities' key exists in ai_preds
-        if "entities" not in ai_preds:
-            ai_preds["entities"] = {}
+        try:
+            # Ensure 'entities' key exists in ai_preds
+            if "entities" not in ai_preds:
+                ai_preds["entities"] = {}
 
-        for key, suggestions in triage_ai_suggestion.items():
-            # Initialize the key in ai_preds["entities"] if it doesn't exist
-            if key not in ai_preds["entities"]:
-                ai_preds["entities"][key] = []
+            for key, suggestions in triage_ai_suggestion.items():
+                # Initialize the key in ai_preds["entities"] if it doesn't exist
+                if key not in ai_preds["entities"]:
+                    ai_preds["entities"][key] = []
 
-            for suggestion in suggestions:
-                found_duplicate = False
-                for ai_pred in ai_preds["entities"].get(key, []):
-                    # If a duplicate code is found in ai_preds, update its source field
-                    if ai_pred["code"] == suggestion["code"]:
-                        if ai_pred["source"] == ["triage"]:
-                            ai_pred["source"] = ["triage"]
-                        else:
-                            ai_pred["source"] = ["ai_suggestions", "triage"]
-                        found_duplicate = True
-                        break  # Stop searching once a duplicate is found
+                for suggestion in suggestions:
+                    found_duplicate = False
+                    for ai_pred in ai_preds["entities"].get(key, []):
+                        # If a duplicate code is found in ai_preds, update its source field
+                        if ai_pred["code"] == suggestion["code"]:
+                            if ai_pred["source"] == ["triage"]:
+                                ai_pred["source"] = ["triage"]
+                            else:
+                                ai_pred["source"] = ["ai_suggestions", "triage"]
+                            found_duplicate = True
+                            break  # Stop searching once a duplicate is found
 
-                if not found_duplicate:
-                    # If the code is unique, add the suggestion to ai_preds with its original source
-                    ai_preds["entities"][key].append({**suggestion, "source": ["triage"]})
-        return ai_preds
+                    if not found_duplicate:
+                        # If the code is unique, add the suggestion to ai_preds with its original source
+                        ai_preds["entities"][key].append({**suggestion, "source": ["triage"]})
+            return ai_preds
+
+        except Exception as exc:
+            msg = "Failed to get merge_suggestions :: {}".format(exc)
+            trace = traceback.format_exc()
+            logger.error(msg, trace)
 
     def execute_function(self, message, start_time):
         try:
@@ -382,9 +416,26 @@ class aiPreds:
                 # else:
                 #     current_segment["ai_preds"] = None
                 entities = self.clean_null_entries(entities)
-                entities = self.merge_procedures_surgeries(entities)
+
+                # merge procedures and surgeries
+                try:
+                    entities = self.merge_procedures_surgeries(entities)
+                except:
+                    pass
+
                 if triage_ai_suggestion:
-                    entities = self.merge_suggestions(entities, triage_ai_suggestion)
+                    try:
+                        # merge suggestions
+                        entities = self.merge_suggestions(entities, triage_ai_suggestion)
+                    except:
+                        pass
+                else:
+                    try:
+                        # rmeove duplicates ai_preds
+                        entities = self.remove_duplicates_ai_preds(entities)
+                    except:
+                        pass
+
                 s3.upload_to_s3(f"{conversation_id}/ai_preds.json", entities, is_json=True)
 
                 if api_type in {"clinical_notes", "soap"}:
