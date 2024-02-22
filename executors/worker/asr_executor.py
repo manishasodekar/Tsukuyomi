@@ -180,6 +180,8 @@ class ASRExecutor:
                     "retry_count": 0
                     }
             s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
+
+            # sending AIPREDS message to kafka queue
             data = {
                 "es_id": f"{conversation_id}_AI_PRED",
                 "chunk_no": chunk_no,
@@ -190,6 +192,54 @@ class ASRExecutor:
                 "executor_name": "AI_PRED",
                 "state": "AiPred",
                 "retry_count": None,
+                "uid": None,
+                "request_id": conversation_id,
+                "care_req_id": conversation_id,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(start_time),
+                "end_time": str(datetime.utcnow()),
+            }
+            producer.publish_executor_message(data)
+
+            # sending CLINICAL_NER message to kafka queue
+            data = {
+                "es_id": f"{conversation_id}_CLINICAL_NER",
+                "chunk_no": chunk_no,
+                "file_path": file_path,
+                "api_path": "clinical_notes",
+                "api_type": "clinical_notes",
+                "req_type": "encounter",
+                "executor_name": "CLINICAL_NER",
+                "state": "ClinicalNer",
+                "retry_count": 0,
+                "uid": None,
+                "request_id": conversation_id,
+                "care_req_id": conversation_id,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(start_time),
+                "end_time": str(datetime.utcnow()),
+            }
+            producer.publish_executor_message(data)
+
+            # sending SOAP message to kafka queue
+            data = {
+                "es_id": f"{conversation_id}_SOAP",
+                "chunk_no": chunk_no,
+                "file_path": file_path,
+                "api_path": "clinical_notes",
+                "api_type": "clinical_notes",
+                "req_type": "encounter",
+                "executor_name": "SOAP_EXECUTOR",
+                "state": "Analytics",
+                "retry_count": 0,
                 "uid": None,
                 "request_id": conversation_id,
                 "care_req_id": conversation_id,
@@ -328,6 +378,30 @@ class ASRExecutor:
                     "end_time": str(datetime.utcnow()),
                 }
                 producer.publish_executor_message(data)
+
+                data = {
+                    "es_id": f"{request_id}_CLINICAL_NER",
+                    "file_path": file_path,
+                    "webhook_url": webhook_url,
+                    "api_path": api_path,
+                    "api_type": api_type,
+                    "req_type": "platform",
+                    "executor_name": "CLINICAL_NER",
+                    "state": "ClinicalNer",
+                    "retry_count": 0,
+                    "uid": None,
+                    "request_id": request_id,
+                    "care_req_id": request_id,
+                    "encounter_id": None,
+                    "provider_id": None,
+                    "review_provider_id": None,
+                    "completed": False,
+                    "exec_duration": 0.0,
+                    "start_time": str(start_time),
+                    "end_time": str(datetime.utcnow()),
+                }
+                producer.publish_executor_message(data)
+
             elif api_type == "transcription":
                 self.create_delivery_task(message=message)
 
