@@ -6,6 +6,7 @@ import os
 import time
 import gipc
 import json
+import wave
 import requests
 import traceback
 from gevent.pywsgi import WSGIServer
@@ -18,6 +19,8 @@ from config.logconfig import get_logger
 from utils.s3_operation import S3SERVICE
 from services.kafka.kafka_service import KafkaService
 from datetime import datetime
+from io import BytesIO
+from pydub import AudioSegment
 
 s3 = S3SERVICE()
 producer = KafkaService(group_id="soap")
@@ -128,12 +131,14 @@ def websocket_handler(env, start_response):
         ws = env["wsgi.websocket"]
         message = ws.receive()
         initial_timestamp = time.time()
-        logger.info(f"message :: {message}")
+        transcript = ""
+        recording_status = None
         try:
             message = json.loads(message)
             connection_id = message["stream_key"]
             user_type = message["user_type"]
             uid = message.get("uid")
+            req_type = message.get("req_type")
             push_logs(care_request_id=connection_id,
                       given_msg="Websocket has started",
                       he_type=user_type,
@@ -141,18 +146,22 @@ def websocket_handler(env, start_response):
                       source_type="backend")
 
             triage_ai_suggestion = message.get("triage_ai_suggestion", {})
-            triage_key = f"{connection_id}/triage_ai_suggestion.json"
             if triage_ai_suggestion:
+                triage_key = f"{connection_id}/triage_ai_suggestion.json"
                 s3.upload_to_s3(triage_key, triage_ai_suggestion, is_json=True)
 
             triage_ai_preds = message.get("ai_preds", None)
-            triage_ai_preds_key = f"{connection_id}/triage_ai_preds.json"
             if triage_ai_preds or triage_ai_preds != "":
                 triage_data = {"ai_preds": triage_ai_preds}
+                triage_ai_preds_key = f"{connection_id}/triage_ai_preds.json"
                 s3.upload_to_s3(triage_ai_preds_key, triage_data, is_json=True)
 
-            logger.info(f"ws :: {ws}")
-            logger.info(f"Intializing trascription, coding, etc. :: {connection_id}")
+            if req_type or req_type == "healiom_copilot":
+                logger.info(f"ws :: {ws}")
+                logger.info(f"Intializing trascription, coding, etc. for Helaiom Copilot :: {connection_id}")
+            else:
+                logger.info(f"ws :: {ws}")
+                logger.info(f"Intializing trascription, coding, etc. :: {connection_id}")
 
         except Exception as ex:
             trace = traceback.format_exc()
@@ -167,11 +176,21 @@ def websocket_handler(env, start_response):
             return
 
         IS_RTMP_ALREADY_RUNNING = False
-        if user_type in {"provider", "inclinic"}:
-            IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp(connection_id)
-            IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp_for_connection_id(
-                connection_id, user_type, ws
-            )
+        if not req_type:
+            if user_type in {"provider", "inclinic"}:
+                IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp(connection_id)
+                IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp_for_connection_id(
+                    connection_id, user_type, ws
+                )
+
+        if req_type and req_type == "healiom_copilot":
+            data = {"stream_key": connection_id,
+                    "last_processed_end_time": 0,
+                    "stage": "rtmp_saving_started"}
+            s3_file = f"{connection_id}/{connection_id}.json"
+            if not s3.check_file_exists(s3_file):
+                s3.upload_to_s3(s3_file, data, is_json=True)
+            logger.info(f"Writing chunks started :: {connection_id}")
 
         logger.info(f"SENDING EMPTY AI PREDS TO WS :: {ws}")
 
@@ -194,10 +213,14 @@ def websocket_handler(env, start_response):
         last_number_of_segments = 0
         last_ack_sent_at = time.time()
 
+        # for healiom copilot
+        chunk_iteration = 0
+        chunk_count = 0
+        combine_wav = AudioSegment.silent(duration=0)
         while True:
+            key = f"{connection_id}/{connection_id}.json"
+            current_stream_key_info = s3.get_json_file(key)
             try:
-                key = f"{connection_id}/{connection_id}.json"
-                current_stream_key_info = s3.get_json_file(key)
                 if user_type not in {"provider", "inclinic"}:
                     transcript_key = f"{connection_id}/transcript.json"
                     transcript = s3.get_json_file(transcript_key)
@@ -207,6 +230,90 @@ def websocket_handler(env, start_response):
                             "success": True
                         }
                     ))
+
+                if req_type and req_type == "healiom_copilot":
+                    message = ws.receive()
+                    if isinstance(message, bytes):
+                        audio_buffer = BytesIO()
+                        audio_buffer.write(message)
+
+                        # Once all audio data is received, convert from webm to wav
+                        # Reset buffer pointer to the beginning for reading
+                        audio_buffer.seek(0)
+                        audio = AudioSegment.from_file(audio_buffer, format="webm")
+                        combine_wav += audio
+                        wav_buffer = BytesIO()
+                        get_audio = audio.export(wav_buffer, format="wav",
+                                                 parameters=["-ac", "1", "-ar", "16000", "-sample_fmt", "s16"])
+                        wav_buffer.seek(0)
+                        try:
+                            # Send the wav audio data for transcription
+                            transcription_result = requests.post(
+                                heconstants.AI_SERVER + "/infer",
+                                files={"f1": wav_buffer},
+                            ).json()["prediction"][0]
+
+                            segments = transcription_result.get("segments")
+                            if segments:
+                                text = segments[0].get("text")
+                                if text:
+                                    if transcript != "":
+                                        transcript += " " + text
+                                    else:
+                                        transcript = text
+
+                            ws.send(json.dumps({"cc": transcript, "success": True}))
+                            chunk_iteration += 1
+                            # todo uncomment below code if required
+                            # transcript_key = f"{connection_id}/transcript.json"
+                            # transcript_data = {"transcript": transcript}
+                            # s3.upload_to_s3(transcript_key, transcript_data, is_json=True)
+                        except Exception as ex:
+                            logger.error(f"Error while sending latest cc : {ex}")
+                            pass
+
+                        if chunk_iteration >= 5:
+                            combine_wav_buffer = BytesIO()
+                            chunk_count += 1
+                            combine_wav.export(combine_wav_buffer, format="wav",
+                                               parameters=["-ac", "1", "-ar", "16000", "-sample_fmt",
+                                                           "s16"])
+                            chunk_audio_key = f"{connection_id}/{connection_id}_chunk{chunk_count}.wav"
+                            s3.upload_to_s3(chunk_audio_key, combine_wav_buffer.read())
+                            combine_wav = AudioSegment.silent(duration=0)
+                            chunk_iteration = 0
+                            data = {
+                                "es_id": f"{connection_id}_ASR_EXECUTOR",
+                                "chunk_no": chunk_count,
+                                "file_path": chunk_audio_key,
+                                "api_path": "clinical_notes",
+                                "api_type": "clinical_notes",
+                                "req_type": "encounter",
+                                "executor_name": "ASR_EXECUTOR",
+                                "state": "SpeechToText",
+                                "retry_count": 0,
+                                "uid": None,
+                                "request_id": connection_id,
+                                "care_req_id": connection_id,
+                                "encounter_id": None,
+                                "provider_id": None,
+                                "review_provider_id": None,
+                                "completed": False,
+                                "exec_duration": 0.0,
+                                "start_time": str(datetime.utcnow()),
+                                "end_time": str(datetime.utcnow()),
+                            }
+                            producer.publish_executor_message(data)
+                            merged_audio_buffer = BytesIO()
+                            merged_WAV_F = wave.open(merged_audio_buffer, "wb")
+                            merged_WAV_F.setnchannels(1)
+                            merged_WAV_F.setsampwidth(2)
+                            merged_WAV_F.setframerate(16000)
+                    else:
+                        # Handle non-binary messages (optional)
+                        logger.info(f"Received non-binary message: {message}")
+                        message = json.loads(message)
+                        recording_status = message.get("recording_status")
             except:
                 time.sleep(2)
                 continue
@@ -230,6 +337,8 @@ def websocket_handler(env, start_response):
                 )
 
                 is_rtmp_done = current_stage == "rtmp_saving_done"
+                if recording_status == "ended":
+                    is_rtmp_done = True
                 if is_rtmp_done:
                     logger.info(f"current_stage: {current_stage}, is_rtmp_done: {is_rtmp_done}")
                     current_stream_key_info["stage"] = "finished"
@@ -251,7 +360,7 @@ def websocket_handler(env, start_response):
                             latest_ai_preds_resp = json.loads(ai_preds_resp.text)
                         last_preds_sent_at = time.time()
 
-                    elif time.time() - last_trans_sent_at >= 8:
+                    elif time.time() - last_trans_sent_at >= 8 and not req_type:
                         ai_preds_resp = requests.get(
                             heconstants.SYNC_SERVER + f"/history?conversation_id={connection_id}&only_transcribe=True"
                         )
