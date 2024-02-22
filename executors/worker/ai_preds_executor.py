@@ -222,8 +222,10 @@ class aiPreds:
 
                     if not found_duplicate:
                         # If the code is unique, add the suggestion to ai_preds with its original source
-                        ai_preds["entities"][key].append({**suggestion, "source": ["triage"]})
+                        ai_preds["entities"][key].append({**suggestion, "text": suggestion.get("code_value"),
+                                                          "source": ["triage"]})
             return ai_preds
+
 
         except Exception as exc:
             msg = "Failed to get merge_suggestions :: {}".format(exc)

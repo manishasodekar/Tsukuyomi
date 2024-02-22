@@ -326,10 +326,11 @@ class soap:
 
             if api_type == "soap":
                 input_text = s3.get_json_file(s3_filename=file_path)
-                transcript = input_text.get("transcript")
-                interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
+                interest_texts = input_text.get("transcript")
+                # interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
             else:
-                interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
+                # interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
+                interest_texts = " ".join([_["text"] for _ in segments])
 
             if interest_texts and len(" ".join(interest_texts).split()) >= 20:
 
