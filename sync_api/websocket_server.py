@@ -249,7 +249,7 @@ def websocket_handler(env, start_response):
                         try:
                             # Send the wav audio data for transcription
                             transcription_result = requests.post(
-                                heconstants.AI_SERVER + "/infer",
+                                heconstants.AI_SERVER + "/transcribe/infer",
                                 files={"f1": wav_buffer},
                             ).json()["prediction"][0]
 
