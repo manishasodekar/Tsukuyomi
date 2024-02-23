@@ -142,7 +142,7 @@ class ASRExecutor:
             # ).json()["prediction"][0]
 
         except Exception as ex:
-            print(ex)
+            logger.error(f"Somthing wrong with whisper API :: {ex}")
             # esquery
             data = {
                 "received_at": received_at,
