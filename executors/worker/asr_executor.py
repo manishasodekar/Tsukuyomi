@@ -146,6 +146,7 @@ class ASRExecutor:
             # esquery
             data = {
                 "received_at": received_at,
+                "chunk_no": chunk_no,
                 "conversation_id": conversation_id,
                 "user_name": user_name,
                 "duration": duration,
