@@ -380,7 +380,7 @@ def save_rtmp_loop(
 
                 # logger.info(f"sending chunks for transcription :: {key}")
                 transcription_result = requests.post(
-                    heconstants.AI_SERVER + "/transcribe/infer",
+                    heconstants.AI_SERVER + "/infer",
                     files={"f1": wav_buffer},
                 ).json()["prediction"][0]
                 chunk_count += 1
