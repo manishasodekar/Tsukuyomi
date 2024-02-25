@@ -218,9 +218,9 @@ def websocket_handler(env, start_response):
         chunk_count = 0
         combine_wav = AudioSegment.silent(duration=0)
         while True:
-            key = f"{connection_id}/{connection_id}.json"
-            current_stream_key_info = s3.get_json_file(key)
             try:
+                key = f"{connection_id}/{connection_id}.json"
+                current_stream_key_info = s3.get_json_file(key)
                 if user_type not in {"provider", "inclinic"}:
                     transcript_key = f"{connection_id}/transcript.json"
                     transcript = s3.get_json_file(transcript_key)
