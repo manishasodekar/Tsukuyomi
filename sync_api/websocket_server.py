@@ -233,10 +233,10 @@ def websocket_handler(env, start_response):
                     ))
 
                 if req_type and req_type == "healiom_copilot":
-                    message = ws.receive()
-                    if isinstance(message, bytes):
+                    ws_message = ws.receive()
+                    if isinstance(ws_message, bytes):
                         audio_buffer = BytesIO()
-                        audio_buffer.write(message)
+                        audio_buffer.write(ws_message)
 
                         # Once all audio data is received, convert from webm(chrome/firefox)/mp4(safari/egdge) to wav
                         # Reset buffer pointer to the beginning for reading
@@ -312,9 +312,9 @@ def websocket_handler(env, start_response):
                             merged_WAV_F.setframerate(16000)
                     else:
                         # Handle non-binary messages (optional)
-                        # logger.info(f"Received non-binary message: {message}")
-                        message = json.loads(message)
-                        recording_status = message.get("recording_status")
+                        logger.info(f"Received non-binary message: {ws_message}")
+                        ws_message = json.loads(message)
+                        recording_status = ws_message.get("recording_status")
             except:
                 time.sleep(2)
                 continue
