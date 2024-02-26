@@ -159,9 +159,11 @@ def websocket_handler(env, start_response):
 
             if req_type or req_type == "healiom_copilot":
                 logger.info(f"ws :: {ws}")
+                logger.info(f"message :: {message}")
                 logger.info(f"Intializing trascription, coding, etc. for Helaiom Copilot :: {connection_id}")
             else:
                 logger.info(f"ws :: {ws}")
+                logger.info(f"message :: {message}")
                 logger.info(f"Intializing trascription, coding, etc. :: {connection_id}")
 
         except Exception as ex:
@@ -312,7 +314,8 @@ def websocket_handler(env, start_response):
                             merged_WAV_F.setframerate(16000)
                     else:
                         # Handle non-binary messages (optional)
-                        logger.info(f"Received non-binary message: {ws_message}")
+                        if ws_message:
+                            logger.info(f"Received non-binary message: {ws_message}")
                         ws_message = json.loads(message)
                         recording_status = ws_message.get("recording_status")
             except:
