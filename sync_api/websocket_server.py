@@ -139,6 +139,7 @@ def websocket_handler(env, start_response):
             user_type = message["user_type"]
             uid = message.get("uid")
             req_type = message.get("req_type")
+            audio_type = message.get("audio_type")
             push_logs(care_request_id=connection_id,
                       given_msg="Websocket has started",
                       he_type=user_type,
@@ -237,14 +238,14 @@ def websocket_handler(env, start_response):
                         audio_buffer = BytesIO()
                         audio_buffer.write(message)
 
-                        # Once all audio data is received, convert from webm to wav
+                        # Once all audio data is received, convert from webm(chrome/firefox)/mp4(safari/egdge) to wav
                         # Reset buffer pointer to the beginning for reading
                         audio_buffer.seek(0)
-                        audio = AudioSegment.from_file(audio_buffer, format="webm")
+                        audio = AudioSegment.from_file(audio_buffer, format=audio_type)
                         combine_wav += audio
                         wav_buffer = BytesIO()
-                        get_audio = audio.export(wav_buffer, format="wav",
-                                                 parameters=["-ac", "1", "-ar", "16000", "-sample_fmt", "s16"])
+                        audio.export(wav_buffer, format="wav",
+                                     parameters=["-ac", "1", "-ar", "16000", "-sample_fmt", "s16"])
                         wav_buffer.seek(0)
                         try:
                             # Send the wav audio data for transcription
