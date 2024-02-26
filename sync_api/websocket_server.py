@@ -312,7 +312,7 @@ def websocket_handler(env, start_response):
                             merged_WAV_F.setframerate(16000)
                     else:
                         # Handle non-binary messages (optional)
-                        logger.info(f"Received non-binary message: {message}")
+                        # logger.info(f"Received non-binary message: {message}")
                         message = json.loads(message)
                         recording_status = message.get("recording_status")
             except:
