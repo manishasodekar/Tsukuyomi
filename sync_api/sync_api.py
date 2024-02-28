@@ -201,13 +201,16 @@ class History(object):
     def on_get(self, req, resp):
         conversation_id = req.params.get("conversation_id")
         only_transcribe = req.params.get("only_transcribe")
-
-        if not conversation_id:
-            self.logger.error("Bad Request with missing conversation_id")
-            raise falcon.HTTPError(status=400, description="Bad Request with missing conversation_id parameter")
-        resp.media = get_merge_ai_preds(
-            conversation_id, only_transcribe
-        )
+        uid = req.params.get("uid")
+        if uid:
+            resp.media = s3.get_dirs_matching_pattern(pattern=f"carereq__{uid}*")
+        else:
+            if not conversation_id:
+                self.logger.error("Bad Request with missing conversation_id")
+                raise falcon.HTTPError(status=400, description="Bad Request with missing conversation_id parameter")
+            resp.media = get_merge_ai_preds(
+                conversation_id, only_transcribe
+            )
 
 
 class clinicalNotes(object):
