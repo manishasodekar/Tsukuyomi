@@ -118,7 +118,6 @@ class soap:
                 messages = [
                     {
                         "role": "system",
-                        # "content": """Generate clinical summaries following their description for the following transcript""",
                         "content": """Summarize the medical case from given PATIENT PROVIDER CONVERSATION and AI 
                         TRIAGE CONVERSATION in the following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN. It is 
                         important to maintain accuracy and relevance to the medical context and omit any non-medical 
@@ -128,8 +127,8 @@ class soap:
                         supposed to assume anything and don't use any hypothesis. This ensures clarity and precision 
                         in the medical summary, focusing solely on the facts presented.""",
                     },
-                    {"role": "user", "content": f"AI TRIAGE CONVERSATION:\n {triage_ai_preds} \n\nPATIENT PROVIDER "
-                                                f"CONVERSATION:\n {transcript_text}"},
+                    {"role": "user", "content": f"""AI TRIAGE CONVERSATION:\n {str(triage_ai_preds)} \n\nPATIENT PROVIDER """
+                                                f"""CONVERSATION:\n {str(transcript_text)}"""},
                     # {"role": "user", "content": f"TEXT: {text}"},
                 ]
             else:
@@ -145,7 +144,7 @@ class soap:
                         anything and don't use any hypothesis. This ensures clarity and precision in the medical 
                         summary, focusing solely on the facts presented.""",
                     },
-                    {"role": "user", "content": f"PATIENT PROVIDER CONVERSATION:\n {transcript_text}"},
+                    {"role": "user", "content": f"""PATIENT PROVIDER CONVERSATION: {str(transcript_text)}"""},
                     # {"role": "user", "content": f"TEXT: {text}"},
                 ]
 
@@ -339,7 +338,8 @@ class soap:
                     preds = s3.get_json_file(triage_ai_preds_key)
                     triage_ai_preds = preds.get("ai_preds")
 
-                summaries = self.get_clinical_summaries_from_openai("\n".join(interest_texts), triage_ai_preds)
+                # summaries = self.get_clinical_summaries_from_openai("\n".join(interest_texts), triage_ai_preds)
+                summaries = self.get_clinical_summaries_from_openai(interest_texts, triage_ai_preds)
 
                 # subjective_summary
                 try:

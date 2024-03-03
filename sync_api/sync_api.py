@@ -217,6 +217,8 @@ class clinicalNotes(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
         audio_url = req.params.get("audio_url")
+        sync = req.params.get("sync", "false")
+        sync = sync.lower() == 'true'
         clinical_ner = req.params.get("clinical_ner", "false")
         clinical_ner = clinical_ner.lower() == 'true'
         if audio_url is None:
@@ -225,14 +227,38 @@ class clinicalNotes(object):
         request_id = generate_request_id()
         resp.set_header('Request_ID', request_id)
         resp.set_header('WEBHOOK_URL', webhook_url)
-        resp.media = create_task(request_id, webhook_url, audio_url, api_type="clinical_notes",
-                                 clinical_ner_flag=clinical_ner)
+        if not sync:
+            resp.media = create_task(request_id, webhook_url, audio_url, api_type="clinical_notes",
+                                     clinical_ner_flag=clinical_ner)
+        else:
+            create_task(request_id, webhook_url, audio_url, api_type="clinical_notes",
+                        clinical_ner_flag=clinical_ner)
+            while True:
+                file_path = f"{request_id}/All_Preds.json"
+                resp.set_header('Request-ID', request_id)
+                if s3.check_file_exists(file_path):
+                    merged_ai_preds = s3.get_json_file(file_path)
+                    if merged_ai_preds:
+                        status = merged_ai_preds.get("status")
+                        if status:
+                            if status == "Completed":
+                                success = merged_ai_preds.get("success")
+                                del merged_ai_preds['status']
+                                del merged_ai_preds['success']
+                                del merged_ai_preds['request_id']
+                                resp.media = {"request_id": request_id,
+                                              "status": status,
+                                              "results": merged_ai_preds,
+                                              "success": success}
+                                break
 
 
 class Transcription(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
         audio_url = req.params.get("audio_url", "False")
+        sync = req.params.get("sync", "false")
+        sync = sync.lower() == 'true'
         clinical_ner = req.params.get("clinical_ner", "false")
         clinical_ner = clinical_ner.lower() == 'true'
         if audio_url is None:
@@ -241,14 +267,38 @@ class Transcription(object):
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_task(request_id, webhook_url, audio_url, api_type="transcription",
-                                 clinical_ner_flag=clinical_ner)
+        if not sync:
+            resp.media = create_task(request_id, webhook_url, audio_url, api_type="transcription",
+                                     clinical_ner_flag=clinical_ner)
+        else:
+            create_task(request_id, webhook_url, audio_url, api_type="transcription",
+                        clinical_ner_flag=clinical_ner)
+            while True:
+                file_path = f"{request_id}/All_Preds.json"
+                resp.set_header('Request-ID', request_id)
+                if s3.check_file_exists(file_path):
+                    merged_ai_preds = s3.get_json_file(file_path)
+                    if merged_ai_preds:
+                        status = merged_ai_preds.get("status")
+                        if status:
+                            if status == "Completed":
+                                success = merged_ai_preds.get("success")
+                                del merged_ai_preds['status']
+                                del merged_ai_preds['success']
+                                del merged_ai_preds['request_id']
+                                resp.media = {"request_id": request_id,
+                                              "status": status,
+                                              "results": merged_ai_preds,
+                                              "success": success}
+                                break
 
 
 class AiPred(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
         clinical_ner = req.params.get("clinical_ner", "false")
+        sync = req.params.get("sync", "false")
+        sync = sync.lower() == 'true'
         clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
@@ -258,13 +308,37 @@ class AiPred(object):
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_aipred_task(request_id, webhook_url, text, api_type="ai_pred",
-                                        clinical_ner_flag=clinical_ner)
+        if not sync:
+            resp.media = create_aipred_task(request_id, webhook_url, text, api_type="ai_pred",
+                                            clinical_ner_flag=clinical_ner)
+        else:
+            create_aipred_task(request_id, webhook_url, text, api_type="ai_pred",
+                               clinical_ner_flag=clinical_ner)
+            while True:
+                file_path = f"{request_id}/All_Preds.json"
+                resp.set_header('Request-ID', request_id)
+                if s3.check_file_exists(file_path):
+                    merged_ai_preds = s3.get_json_file(file_path)
+                    if merged_ai_preds:
+                        status = merged_ai_preds.get("status")
+                        if status:
+                            if status == "Completed":
+                                success = merged_ai_preds.get("success")
+                                del merged_ai_preds['status']
+                                del merged_ai_preds['success']
+                                del merged_ai_preds['request_id']
+                                resp.media = {"request_id": request_id,
+                                              "status": status,
+                                              "results": merged_ai_preds,
+                                              "success": success}
+                                break
 
 
 class Summary(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
+        sync = req.params.get("sync", "false")
+        sync = sync.lower() == 'true'
         clinical_ner = req.params.get("clinical_ner", "false")
         clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
@@ -275,8 +349,30 @@ class Summary(object):
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_aipred_task(request_id, webhook_url, text, api_type="soap",
-                                        clinical_ner_flag=clinical_ner)
+        if not sync:
+            resp.media = create_aipred_task(request_id, webhook_url, text, api_type="soap",
+                                            clinical_ner_flag=clinical_ner)
+        else:
+            create_aipred_task(request_id, webhook_url, text, api_type="soap",
+                               clinical_ner_flag=clinical_ner)
+            while True:
+                file_path = f"{request_id}/All_Preds.json"
+                resp.set_header('Request-ID', request_id)
+                if s3.check_file_exists(file_path):
+                    merged_ai_preds = s3.get_json_file(file_path)
+                    if merged_ai_preds:
+                        status = merged_ai_preds.get("status")
+                        if status:
+                            if status == "Completed":
+                                success = merged_ai_preds.get("success")
+                                del merged_ai_preds['status']
+                                del merged_ai_preds['success']
+                                del merged_ai_preds['request_id']
+                                resp.media = {"request_id": request_id,
+                                              "status": status,
+                                              "results": merged_ai_preds,
+                                              "success": success}
+                                break
 
 
 class Status(object):
