@@ -12,7 +12,7 @@ def main():
 
     # Function to fetch filenames from the API
     def fetch_filenames():
-        dirs = s3.get_dirs_matching_pattern(pattern="carereq*")
+        dirs = s3.get_dirs_matching_pattern(pattern="c*")
         if dirs:
             return dirs
         else:

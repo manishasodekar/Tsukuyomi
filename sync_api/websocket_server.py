@@ -221,6 +221,7 @@ def websocket_handler(env, start_response):
         chunk_iteration = 0
         chunk_count = 0
         combine_wav = AudioSegment.silent(duration=0)
+        recording_status = True
         while True:
             try:
                 key = f"{connection_id}/{connection_id}.json"
@@ -236,7 +237,9 @@ def websocket_handler(env, start_response):
                     ))
 
                 if req_type and req_type == "healiom_copilot":
-                    ws_message = ws.receive()
+                    ws_message = None
+                    if recording_status:
+                        ws_message = ws.receive()
                     if isinstance(ws_message, bytes):
                         audio_buffer = BytesIO()
                         audio_buffer.write(ws_message)
@@ -323,7 +326,7 @@ def websocket_handler(env, start_response):
                         # Handle non-binary messages (optional)
                         if ws_message:
                             logger.info(f"Received non-binary message: {ws_message}")
-                            ws_message = json.loads(message)
+                            ws_message = json.loads(ws_message)
                             recording_status = ws_message.get("isRecording")
                             if recording_status == False:
                                 logger.info("Merging final set of chunks")
@@ -358,7 +361,7 @@ def websocket_handler(env, start_response):
                                     "end_time": str(datetime.utcnow()),
                                 }
                                 producer.publish_executor_message(data)
-                                logger.info("Merging final set of chunks")
+                                logger.info("Merged final chunks")
             except:
                 time.sleep(2)
                 continue
