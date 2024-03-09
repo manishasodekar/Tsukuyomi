@@ -279,7 +279,6 @@ def websocket_handler(env, start_response):
 
                             if transcript:
                                 transcript = re.sub(' +', ' ', transcript).strip()
-                                transcript = transcript.replace("Thank you.", "").replace("You.", "")
                             ws.send(json.dumps({"cc": transcript, "success": True}))
                             chunk_iteration += 1
                             # todo uncomment below code if required

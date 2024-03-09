@@ -1,6 +1,7 @@
 import fnmatch
 import io
 import logging
+import re
 import traceback
 from datetime import datetime
 from typing import Optional
@@ -28,6 +29,11 @@ s3_client = boto3.client('s3', aws_access_key_id=heconstants.AWS_ACCESS_KEY,
 # Load Silero VAD
 model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
 (get_speech_ts, _, read_audio, *_) = utils
+
+pattern = re.compile(
+    r'(?:\b(?:thanks|thank you|you|bye|yeah|beep|okay|peace)\b[.!?,-]*\s*){2,}',
+    re.IGNORECASE)
+word_pattern = re.compile(r'\b(?:Thank you|Bye|You)\.')
 
 class S3SERVICE:
     def __init__(self):
@@ -390,9 +396,15 @@ def save_rtmp_loop(
                     if text:
                         if transcript != "":
                             transcript += " " + text
+                            transcript = pattern.sub('', transcript)
+                            transcript = word_pattern.sub('', transcript)
                         else:
                             transcript = text
+                            transcript = pattern.sub('', transcript)
+                            transcript = word_pattern.sub('', transcript)
                 try:
+                    if transcript:
+                        transcript = re.sub(' +', ' ', transcript).strip()
                     websocket.send(json.dumps({"cc": transcript, "success": True}))
                     transcript_key = f"{stream_key}/transcript.json"
                     transcript_data = {"transcript": transcript}
