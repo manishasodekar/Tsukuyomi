@@ -2,6 +2,7 @@ from gevent import monkey
 
 monkey.patch_all()
 
+import re
 import os
 import time
 import gipc
@@ -259,12 +260,23 @@ def websocket_handler(env, start_response):
                             segments = transcription_result.get("segments")
                             if segments:
                                 text = segments[0].get("text")
+                                pattern = re.compile(
+                                    r'(?:\b(?:thanks|thank you|you|bye|yeah|beep|okay|peace)\b[.!?,-]*\s*){2,}',
+                                    re.IGNORECASE)
+                                word_pattern = re.compile(r'\b(?:Thank you|Bye|You)\.')
                                 if text:
                                     if transcript != "":
                                         transcript += " " + text
+                                        transcript = pattern.sub('', transcript)
+                                        transcript = word_pattern.sub('', transcript)
                                     else:
                                         transcript = text
+                                        transcript = pattern.sub('', transcript)
+                                        transcript = word_pattern.sub('', transcript)
 
+                            if transcript:
+                                transcript = re.sub(' +', ' ', transcript).strip()
+                                transcript = transcript.replace("Thank you.", "").replace("You.", "")
                             ws.send(json.dumps({"cc": transcript, "success": True}))
                             chunk_iteration += 1
                             # todo uncomment below code if required
@@ -307,17 +319,46 @@ def websocket_handler(env, start_response):
                                 "end_time": str(datetime.utcnow()),
                             }
                             producer.publish_executor_message(data)
-                            merged_audio_buffer = BytesIO()
-                            merged_WAV_F = wave.open(merged_audio_buffer, "wb")
-                            merged_WAV_F.setnchannels(1)
-                            merged_WAV_F.setsampwidth(2)
-                            merged_WAV_F.setframerate(16000)
                     else:
                         # Handle non-binary messages (optional)
                         if ws_message:
                             logger.info(f"Received non-binary message: {ws_message}")
-                        ws_message = json.loads(message)
-                        recording_status = ws_message.get("recording_status")
+                            ws_message = json.loads(message)
+                            recording_status = ws_message.get("isRecording")
+                            if recording_status == False:
+                                logger.info("Merging final set of chunks")
+                                combine_wav_buffer = BytesIO()
+                                chunk_count += 1
+                                combine_wav.export(combine_wav_buffer, format="wav",
+                                                   parameters=["-ac", "1", "-ar", "16000", "-sample_fmt",
+                                                               "s16"])
+                                chunk_audio_key = f"{connection_id}/{connection_id}_chunk{chunk_count}.wav"
+                                s3.upload_to_s3(chunk_audio_key, combine_wav_buffer.read())
+                                combine_wav = AudioSegment.silent(duration=0)
+                                chunk_iteration = 0
+                                data = {
+                                    "es_id": f"{connection_id}_ASR_EXECUTOR",
+                                    "chunk_no": chunk_count,
+                                    "file_path": chunk_audio_key,
+                                    "api_path": "clinical_notes",
+                                    "api_type": "clinical_notes",
+                                    "req_type": "encounter",
+                                    "executor_name": "ASR_EXECUTOR",
+                                    "state": "SpeechToText",
+                                    "retry_count": 0,
+                                    "uid": None,
+                                    "request_id": connection_id,
+                                    "care_req_id": connection_id,
+                                    "encounter_id": None,
+                                    "provider_id": None,
+                                    "review_provider_id": None,
+                                    "completed": False,
+                                    "exec_duration": 0.0,
+                                    "start_time": str(datetime.utcnow()),
+                                    "end_time": str(datetime.utcnow()),
+                                }
+                                producer.publish_executor_message(data)
+                                logger.info("Merging final set of chunks")
             except:
                 time.sleep(2)
                 continue
@@ -380,6 +421,16 @@ def websocket_handler(env, start_response):
                                 logger.info(f"SENDING AI PREDS TO WS :: {ws}")
                                 # latest_ai_preds_resp["triage_ai_suggestion"] = triage_ai_suggestion
                                 latest_ai_preds_resp["uid"] = uid
+                                long_transcript = latest_ai_preds_resp.get("transcript")
+                                if long_transcript:
+                                    pattern = re.compile(
+                                        r'(?:\b(?:thanks|thank you|you|bye|yeah|beep|okay|peace)\b[.!?,-]*\s*){2,}',
+                                        re.IGNORECASE)
+                                    word_pattern = re.compile(r'\b(?:Thank you|Bye|You)\.')
+                                    long_transcript = pattern.sub('', long_transcript)
+                                    long_transcript = word_pattern.sub('', long_transcript)
+                                    long_transcript = re.sub(' +', ' ', long_transcript).strip()
+                                    latest_ai_preds_resp['transcript'] = long_transcript
                                 ws.send(json.dumps(latest_ai_preds_resp))
                                 merged_json_key = f"{connection_id}/All_Preds.json"
                                 s3.upload_to_s3(merged_json_key, latest_ai_preds_resp, is_json=True)

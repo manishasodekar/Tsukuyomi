@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import os
+import re
 import subprocess
 import traceback
 from datetime import datetime
@@ -126,9 +127,21 @@ class finalExecutor:
                         elif api_type == "soap":
                             response_json["summaries"] = merged_ai_preds.get("summaries")
 
+                    pattern = re.compile(
+                        r'(?:\b(?:thanks|thank you|you|bye|yeah|beep|okay|peace)\b[.!?,-]*\s*){2,}',
+                        re.IGNORECASE)
+                    word_pattern = re.compile(r'\b(?:Thank you|Bye|You)\.')
+
                     if merged_segments:
-                        response_json["transcript"] = " ".join([_["text"] for _ in merged_segments])
+                        long_transcript = " ".join([_["text"] for _ in merged_segments])
+                        long_transcript = pattern.sub('', long_transcript)
+                        long_transcript = word_pattern.sub('', long_transcript)
+                        long_transcript = re.sub(' +', ' ', long_transcript).strip()
+                        response_json["transcript"] = long_transcript
                     elif text:
+                        text = pattern.sub('', text)
+                        text = word_pattern.sub('', text)
+                        text = re.sub(' +', ' ', text).strip()
                         response_json["transcript"] = text
 
                     response_json["success"] = True
