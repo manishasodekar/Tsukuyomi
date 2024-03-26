@@ -127,8 +127,9 @@ class soap:
                         supposed to assume anything and don't use any hypothesis. This ensures clarity and precision 
                         in the medical summary, focusing solely on the facts presented.""",
                     },
-                    {"role": "user", "content": f"""AI TRIAGE CONVERSATION:\n {str(triage_ai_preds)} \n\nPATIENT PROVIDER """
-                                                f"""CONVERSATION:\n {str(transcript_text)}"""},
+                    {"role": "user",
+                     "content": f"""AI TRIAGE CONVERSATION:\n {str(triage_ai_preds)} \n\nPATIENT PROVIDER """
+                                f"""CONVERSATION:\n {str(transcript_text)}"""},
                     # {"role": "user", "content": f"TEXT: {text}"},
                 ]
             else:
@@ -177,12 +178,51 @@ class soap:
             msg = "Failed to get OPEN AI SUMMARIES :: {}".format(exc)
             self.logger.error(msg)
 
+    def translate_transcript_open_ai(self,
+                                     transcript_text,
+                                     language,
+                                     min_length=30,
+                                     ):
+        try:
+            transcript_text = transcript_text.strip()
+            if not transcript_text or len(transcript_text) <= min_length:
+                raise Exception("Transcript text is too short")
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": f"""Please translate the following conversation from {language} to English.""",
+                },
+                {"role": "user", "content": f"{transcript_text}"},
+            ]
+
+            for model_name in ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]:
+                try:
+                    response = openai.ChatCompletion.create(
+                        model=model_name,
+                        messages=messages,
+                    )
+                    translated_text = response.choices[0]["message"]["content"]
+                    logger.info(f"translated_text :: {translated_text}")
+                    # extracted_info = json.loads(
+                    #     response.choices[0]["message"]["function_call"]["arguments"]
+                    # )
+                    return translated_text
+
+                except Exception as ex:
+                    logger.error(ex)
+                    pass
+        except Exception as exc:
+            msg = "Failed to get translate conversation from OPEN AI :: {}".format(exc)
+            logger.error(msg)
+
     def get_merge_ai_preds(self, conversation_id, message):
         try:
             req_type = message.get("req_type")
             api_type = message.get("api_type")
             file_path = message.get("file_path")
             merged_segments = []
+            language_counts = {}
             merged_ai_preds = {
                 "age": {"text": None, "value": None, "unit": None},
                 "gender": {"text": None, "value": None, "unit": None},
@@ -214,6 +254,8 @@ class soap:
             }
 
             conversation_datas = None
+            dominant_language = None
+
             if req_type == "encounter":
                 conversation_datas = s3.get_files_matching_pattern(
                     pattern=f"{conversation_id}/{conversation_id}_*json")
@@ -225,12 +267,28 @@ class soap:
             if conversation_datas:
                 for conversation_data in conversation_datas:
                     merged_segments += conversation_data["segments"]
+                    # Count the occurrence of each language
+                    language = conversation_data["language"]
+                    if language in language_counts:
+                        language_counts[language] += 1
+                    else:
+                        language_counts[language] = 1
+
+                # Calculate total number of conversations to find 80% threshold
+                total_conversations = len(conversation_datas)
+                threshold_80_percent = total_conversations * 0.8
+
+                # Check if any language other than "en" meets the 80% threshold
+                for language, count in language_counts.items():
+                    if language != "en" and count >= threshold_80_percent:
+                        dominant_language = language
+                        break
 
             ai_preds_file_path = f"{conversation_id}/ai_preds.json"
             if s3.check_file_exists(ai_preds_file_path):
                 merged_ai_preds = s3.get_json_file(s3_filename=ai_preds_file_path)
 
-            return merged_segments, merged_ai_preds
+            return merged_segments, merged_ai_preds, dominant_language
 
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while merging ai preds  {e}")
@@ -290,7 +348,8 @@ class soap:
             api_path = message.get("api_path")
             triage_ai_preds = None
 
-            segments, last_ai_preds = self.get_merge_ai_preds(conversation_id=conversation_id, message=message)
+            segments, last_ai_preds, dominant_language = self.get_merge_ai_preds(conversation_id=conversation_id,
+                                                                                 message=message)
 
             subjective_summary = []
             for k in [
@@ -326,13 +385,19 @@ class soap:
             if api_type == "soap":
                 input_text = s3.get_json_file(s3_filename=file_path)
                 interest_texts = input_text.get("transcript")
+                dominant_language = input_text.get("language")
                 # interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
             else:
                 # interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
                 interest_texts = " ".join([_["text"] for _ in segments])
 
-            if interest_texts and len(" ".join(interest_texts).split()) >= 20:
+            if dominant_language and dominant_language != "en":
+                interest_texts = self.translate_transcript_open_ai(interest_texts, dominant_language)
+                transcript_data = {"transcript": interest_texts, "language": "en"}
+                s3.upload_to_s3(f"{conversation_id}/translated_transcript.json", transcript_data, is_json=True)
 
+            # if interest_texts and len(" ".join(interest_texts).split()) >= 20:
+            if interest_texts and len(interest_texts.split()) >= 20:
                 triage_ai_preds_key = f"{conversation_id}/triage_ai_preds.json"
                 if s3.check_file_exists(triage_ai_preds_key):
                     preds = s3.get_json_file(triage_ai_preds_key)

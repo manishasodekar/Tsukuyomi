@@ -246,7 +246,9 @@ class aiPreds:
             triage_ai_suggestion = None
             text = None
             merged_segments = []
+            language_counts = {}
             conversation_datas = None
+            dominant_language = None
 
             if req_type == "encounter":
                 conversation_id = message.get("request_id")
@@ -259,10 +261,27 @@ class aiPreds:
                 elif api_type in {"ai_pred", "soap"}:
                     input_text = s3.get_json_file(s3_filename=file_path)
                     text = input_text.get("transcript")
+                    dominant_language = input_text.get("language")
 
             if conversation_datas:
                 for conversation_data in conversation_datas:
                     merged_segments += conversation_data["segments"]
+                    # Count the occurrence of each language
+                    language = conversation_data["language"]
+                    if language in language_counts:
+                        language_counts[language] += 1
+                    else:
+                        language_counts[language] = 1
+
+                # Calculate total number of conversations to find 80% threshold
+                total_conversations = len(conversation_datas)
+                threshold_80_percent = total_conversations * 0.8
+
+                # Check if any language other than "en" meets the 80% threshold
+                for language, count in language_counts.items():
+                    if language != "en" and count >= threshold_80_percent:
+                        dominant_language = language
+                        break
 
             entities = {
                 "age": {"text": None, "value": None, "unit": None},
@@ -299,6 +318,11 @@ class aiPreds:
             if merged_segments or text:
                 if merged_segments:
                     text = " ".join([_["text"] for _ in merged_segments])
+
+                if dominant_language and dominant_language != "en":
+                    text = self.translate_transcript_open_ai(text, dominant_language)
+                    transcript_data = {"transcript": text, "language": "en"}
+                    s3.upload_to_s3(f"{conversation_id}/translated_transcript.json", transcript_data, is_json=True)
 
                 triage_key = f"{conversation_id}/triage_ai_suggestion.json"
                 if s3.check_file_exists(triage_key):
@@ -683,6 +707,44 @@ class aiPreds:
                     pass
         except Exception as exc:
             msg = "Failed to get OPEN AI PREDICTION :: {}".format(exc)
+            logger.error(msg)
+
+    def translate_transcript_open_ai(self,
+                                     transcript_text,
+                                     language,
+                                     min_length=30,
+                                     ):
+        try:
+            transcript_text = transcript_text.strip()
+            if not transcript_text or len(transcript_text) <= min_length:
+                raise Exception("Transcript text is too short")
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": f"""Please translate the following conversation from {language} to English.""",
+                },
+                {"role": "user", "content": f"{transcript_text}"},
+            ]
+
+            for model_name in ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]:
+                try:
+                    response = openai.ChatCompletion.create(
+                        model=model_name,
+                        messages=messages,
+                    )
+                    translated_text = response.choices[0]["message"]["content"]
+                    logger.info(f"translated_text :: {translated_text}")
+                    # extracted_info = json.loads(
+                    #     response.choices[0]["message"]["function_call"]["arguments"]
+                    # )
+                    return translated_text
+
+                except Exception as ex:
+                    logger.error(ex)
+                    pass
+        except Exception as exc:
+            msg = "Failed to get translate conversation from OPEN AI :: {}".format(exc)
             logger.error(msg)
 
     def create_delivery_task(self, message):

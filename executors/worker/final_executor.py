@@ -144,6 +144,12 @@ class finalExecutor:
                         text = re.sub(' +', ' ', text).strip()
                         response_json["transcript"] = text
 
+                    if s3.check_file_exists(key=f"{request_id}/translated_transcript.json"):
+                        translated_transcript_content = s3.get_json_file(
+                            s3_filename=f"{request_id}/translated_transcript.json")
+                        if translated_transcript_content:
+                            response_json["translated_transcript"] = translated_transcript_content.get("transcript")
+
                     response_json["success"] = True
 
                     if not failed_state:
@@ -154,20 +160,21 @@ class finalExecutor:
                     merged_json_key = f"{request_id}/All_Preds.json"
                     s3.upload_to_s3(merged_json_key, response_json, is_json=True)
 
-                    if len(response_json["transcript"]) > 0 and not failed_state:
-                        status_code, response_text = self.send_webhook(webhook_url, response_json)
-                        logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
-                    else:
-                        error_resp = {"success": False,
-                                      "request_id": request_id,
-                                      "issue": [{
-                                          "error-code": "HE-101",
-                                          "message": "Failed to process the request."
-                                      }]
-                                      }
+                    if webhook_url:
+                        if len(response_json["transcript"]) > 0 and not failed_state:
+                            status_code, response_text = self.send_webhook(webhook_url, response_json)
+                            logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
+                        else:
+                            error_resp = {"success": False,
+                                          "request_id": request_id,
+                                          "issue": [{
+                                              "error-code": "HE-101",
+                                              "message": "Failed to process the request."
+                                          }]
+                                          }
 
-                        status_code, response_text = self.send_webhook(webhook_url, error_resp)
-                        logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
+                            status_code, response_text = self.send_webhook(webhook_url, error_resp)
+                            logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
 
         except Exception as exc:
             msg = "Failed to merge and send ai_preds :: {}".format(exc)

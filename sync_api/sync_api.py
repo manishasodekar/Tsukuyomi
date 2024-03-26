@@ -103,6 +103,12 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
             if merged_segments:
                 response_json["transcript"] = " ".join([_["text"] for _ in merged_segments])
 
+            if s3.check_file_exists(key=f"{conversation_id}/translated_transcript.json"):
+                translated_transcript_content = s3.get_json_file(
+                    s3_filename=f"{conversation_id}/translated_transcript.json")
+                if translated_transcript_content:
+                    response_json["translated_transcript"] = translated_transcript_content.get("transcript")
+
             return response_json
 
         return {"success": False,
@@ -152,7 +158,7 @@ def create_task(request_id, webhook_url, audio_url, api_type, clinical_ner_flag)
     }
 
 
-def create_aipred_task(request_id, webhook_url, text, api_type, clinical_ner_flag):
+def create_aipred_task(request_id, webhook_url, text, language, api_type, clinical_ner_flag):
     if api_type == "ai_pred":
         es_id = f"{request_id}_AI_PRED"
         executor_name = "AI_PRED"
@@ -162,7 +168,7 @@ def create_aipred_task(request_id, webhook_url, text, api_type, clinical_ner_fla
         executor_name = "SOAP_EXECUTOR"
         state = "AiPred"
     file_key = f"{request_id}/{request_id}_input.json"
-    transcript = {"transcript": text}
+    transcript = {"transcript": text, "language": language}
     s3.upload_to_s3(s3_filename=file_key, data=transcript, is_json=True)
     data = {
         "es_id": es_id,
@@ -302,6 +308,7 @@ class AiPred(object):
         clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
+        language = data.get("language")
         if text is None:
             self.logger.error("text input is missing.")
             raise falcon.HTTPError(status=400, description="text input is missing.")
@@ -309,10 +316,10 @@ class AiPred(object):
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
         if not sync:
-            resp.media = create_aipred_task(request_id, webhook_url, text, api_type="ai_pred",
+            resp.media = create_aipred_task(request_id, webhook_url, text, language=language, api_type="ai_pred",
                                             clinical_ner_flag=clinical_ner)
         else:
-            create_aipred_task(request_id, webhook_url, text, api_type="ai_pred",
+            create_aipred_task(request_id, webhook_url, text, language=language, api_type="ai_pred",
                                clinical_ner_flag=clinical_ner)
             while True:
                 file_path = f"{request_id}/All_Preds.json"
@@ -343,6 +350,7 @@ class Summary(object):
         clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
+        language = data.get("language")
         if text is None:
             self.logger.error("text input is missing.")
             raise falcon.HTTPError(status=400, description="text input is missing.")
@@ -350,10 +358,10 @@ class Summary(object):
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
         if not sync:
-            resp.media = create_aipred_task(request_id, webhook_url, text, api_type="soap",
+            resp.media = create_aipred_task(request_id, webhook_url, text, language=language, api_type="soap",
                                             clinical_ner_flag=clinical_ner)
         else:
-            create_aipred_task(request_id, webhook_url, text, api_type="soap",
+            create_aipred_task(request_id, webhook_url, text, language=language, api_type="soap",
                                clinical_ner_flag=clinical_ner)
             while True:
                 file_path = f"{request_id}/All_Preds.json"
