@@ -302,6 +302,7 @@ class aiPreds:
                     "symptoms": [],
                     "diagnoses": [],
                     "procedures": [],
+                    "orders": []
                 },
                 "summaries": {
                     "subjectiveClinicalSummary": [],
@@ -387,6 +388,7 @@ class aiPreds:
                                 ]
                                 if k == "tests":
                                     entities["entities"]["procedures"] = v
+                                    entities["entities"]["orders"] = v
                                 else:
                                     entities["entities"][k] = v
                             elif isinstance(extracted_info.get(k), list):
@@ -405,6 +407,7 @@ class aiPreds:
                                 ]
                                 if k == "tests":
                                     entities["entities"]["procedures"] = val
+                                    entities["entities"]["orders"] = v
                                 else:
                                     entities["entities"][k] = val
                 else:
@@ -436,6 +439,10 @@ class aiPreds:
                                         }
                                         for val in values_list
                                     ]
+                                    pro_entities = entities.get("entities")
+                                    orders = pro_entities.get("procedures")
+                                    if orders:
+                                        entities["entities"]["orders"] = entities["entities"]["procedures"]
 
                 # if entities:
                 #     current_segment["ai_preds"] = entities
