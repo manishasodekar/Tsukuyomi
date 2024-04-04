@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package transcription;
+
+// The transcription service definition.
+service TranscriptionService {
+  // Streams audio for transcription.
+  rpc StreamTranscription(stream AudioChunk) returns (stream TranscriptionResult) {}
+  // Fetches AI predictions based on conversation ID.
+  rpc FetchAIPredictions(ConversationRequest) returns (AIPredictionsResponse) {}
+}
+
+// Represents a chunk of audio data.
+message AudioChunk {
+  bytes audio_content = 1;
+}
+
+// Represents the transcription result for a given audio chunk.
+message TranscriptionResult {
+  string cc = 1;
+  string conversation_id = 2;
+  bool success = 3;
+}
+
+// Request for fetching AI predictions.
+message ConversationRequest {
+  string conversation_id = 1;
+  bool only_transcribe = 2;
+}
+
+// The response structure for AI predictions.
+message AIPredictionsResponse {
+  Predictions age = 1;
+  Predictions gender = 2;
+  Predictions height = 3;
+  Predictions weight = 4;
+  Predictions bmi = 5;
+  Predictions ethnicity = 6;
+  Predictions insurance = 7;
+  Predictions physicalActivityExercise = 8;
+  Predictions bloodPressure = 9;
+  Predictions pulse = 10;
+  Predictions respiratoryRate = 11;
+  Predictions bodyTemperature = 12;
+  Predictions substanceAbuse = 13;
+  Entities entities = 14;
+  Summaries summaries = 15;
+}
+
+// A general structure for predictions with text, value, and unit.
+message Predictions {
+  string text = 1;
+  float value = 2;
+  string unit = 3;
+}
+
+// Represents an entity with its details.
+message EntityDetail {
+  string text = 1;
+  string code = 2;
+  string code_value = 3;
+  string code_type = 4;
+  double confidence = 5;
+  repeated string source = 6;
+}
+
+// Contains entities like medications, symptoms, etc.
+message Entities {
+  repeated EntityDetail medications = 1;
+  repeated EntityDetail symptoms = 2;
+  repeated EntityDetail diagnoses = 3;
+  repeated EntityDetail procedures = 4;
+  repeated EntityDetail orders = 5;
+}
+
+// Contains summaries of clinical information.
+message Summaries {
+  repeated string subjectiveClinicalSummary = 1;
+  repeated string objectiveClinicalSummary = 2;
+  repeated string clinicalAssessment = 3;
+  repeated string carePlanSuggested = 4;
+}
