@@ -10,7 +10,10 @@ from utils import heconstants
 from utils.s3_operation import S3SERVICE
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
+from fastpunct import FastPunct
 
+# The default language is 'english'
+fastpunct = FastPunct()
 nltk.download('punkt')
 s3 = S3SERVICE()
 producer = KafkaService(group_id="soap")
@@ -421,6 +424,11 @@ class soap:
                     if not any([word in line.lower() for word in remove_lines_with_words])
                 ]
 
+                if subjective_summary:
+                    punc_transcript = fastpunct.punct(subjective_summary)
+                    if punc_transcript:
+                        subjective_summary = punc_transcript
+
                 # objective_summary
                 try:
                     objective_summary += nltk.sent_tokenize(summaries["objectiveSummary"])
@@ -433,6 +441,11 @@ class soap:
                     for line in objective_summary
                     if not any([word in line.lower() for word in remove_lines_with_words])
                 ]
+
+                if objective_summary:
+                    punc_transcript = fastpunct.punct(objective_summary)
+                    if punc_transcript:
+                        objective_summary = punc_transcript
 
                 # clinical_assessment_summary
                 try:
@@ -449,6 +462,11 @@ class soap:
                     if not any([word in line.lower() for word in remove_lines_with_words])
                 ]
 
+                if clinical_assessment_summary:
+                    punc_transcript = fastpunct.punct(clinical_assessment_summary)
+                    if punc_transcript:
+                        clinical_assessment_summary = punc_transcript
+
                 # care_plan_summary
                 try:
                     care_plan_summary += nltk.sent_tokenize(summaries["carePlanSummary"])
@@ -462,12 +480,18 @@ class soap:
                     if not any([word in line.lower() for word in remove_lines_with_words])
                 ]
 
+                if care_plan_summary:
+                    punc_transcript = fastpunct.punct(care_plan_summary)
+                    if punc_transcript:
+                        care_plan_summary = punc_transcript
+
                 data = {
                     "subjectiveClinicalSummary": subjective_summary,
                     "objectiveClinicalSummary": objective_summary,
                     "clinicalAssessment": clinical_assessment_summary,
                     "carePlanSuggested": care_plan_summary
                 }
+
                 s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
                 self.create_delivery_task(message=message)
 
