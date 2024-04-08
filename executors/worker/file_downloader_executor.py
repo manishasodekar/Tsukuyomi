@@ -175,6 +175,7 @@ class fileDownloader:
             user_type = message.get("user_type")
             file_path = message.get("file_path")
             retry_count = message.get("retry_count")
+            language = message.get("language", "en")
             logger.info("Received rtmp stream")
             push_logs(care_request_id=stream_key,
                       given_msg="Livestream started (RTMP)",
@@ -246,6 +247,7 @@ class fileDownloader:
                         "encounter_id": None,
                         "provider_id": None,
                         "review_provider_id": None,
+                        "language": language,
                         "completed": False,
                         "exec_duration": 0.0,
                         "start_time": str(chunk_start_datetime),
@@ -289,6 +291,7 @@ class fileDownloader:
                     "encounter_id": None,
                     "provider_id": None,
                     "review_provider_id": None,
+                    "language": language,
                     "completed": False,
                     "exec_duration": 0.0,
                     "start_time": str(start_time),
@@ -322,6 +325,7 @@ class fileDownloader:
             webhook_url = message.get("webhook_url")
             api_type = message.get("api_type")
             api_path = message.get("api_path")
+            language = message.get("language", "en")
 
             if "youtube.com" in file_path or "youtu.be" in file_path:
                 local_filename = f"tmp/{request_id}"  # YouTube videos are downloaded as mp4
@@ -388,6 +392,7 @@ class fileDownloader:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -414,6 +419,7 @@ class fileDownloader:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(datetime.utcnow()),

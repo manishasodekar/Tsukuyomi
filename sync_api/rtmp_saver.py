@@ -18,7 +18,9 @@ from config.logconfig import get_logger
 from botocore.exceptions import NoCredentialsError
 from gevent import Timeout
 from utils import heconstants
+from fastpunct import FastPunct
 
+fastpunct = FastPunct()
 logger = get_logger()
 logger.setLevel(logging.INFO)
 
@@ -34,6 +36,7 @@ pattern = re.compile(
     r'(?:\b(?:thanks|thank you|you|bye|yeah|beep|okay|peace)\b[.!?,-]*\s*){2,}',
     re.IGNORECASE)
 word_pattern = re.compile(r'\b(?:Thank you|Bye|You)\.')
+
 
 class S3SERVICE:
     def __init__(self):
@@ -296,6 +299,7 @@ def yield_chunks_from_rtmp_stream(stream_key, user_type, stream_url=heconstants.
                   source_type="backend")
         return None
 
+
 def is_speech_present(byte_data, model, get_speech_ts):
     try:
         # Convert byte data to tensor
@@ -307,10 +311,12 @@ def is_speech_present(byte_data, model, get_speech_ts):
     except Exception as e:
         logger.error(f"VAD error :: {e}")
 
+
 def save_rtmp_loop(
         stream_key,
         user_type,
         websocket,
+        language="en",
         stream_url=heconstants.RTMP_SERVER_URL,
         DATA_DIR="healiom_websocket_asr",
 ):
@@ -381,12 +387,14 @@ def save_rtmp_loop(
 
                 WAV_F.close()
                 key = f"{stream_key}/{stream_key}_chunk{chunk_count}.wav"
-                wav_buffer.name = key.split("/")[1]
+                filename = key.split("/")[1]
+                unique_id = filename.split(".")[0] + "__" + language
+                wav_buffer.name = filename
                 wav_buffer.seek(0)  # Reset buffer pointer to the beginning
 
                 # logger.info(f"sending chunks for transcription :: {key}")
                 transcription_result = requests.post(
-                    heconstants.AI_SERVER + "/infer",
+                    heconstants.AI_SERVER + f"/infer?unique_id={unique_id}",
                     files={"f1": wav_buffer},
                 ).json()["prediction"][0]
                 chunk_count += 1
@@ -405,6 +413,9 @@ def save_rtmp_loop(
                 try:
                     if transcript:
                         transcript = re.sub(' +', ' ', transcript).strip()
+                        punc_transcript = fastpunct.punct([transcript])[0]
+                        if punc_transcript:
+                            transcript = punc_transcript
                     websocket.send(json.dumps({"cc": transcript, "success": True}))
                     transcript_key = f"{stream_key}/transcript.json"
                     transcript_data = {"transcript": transcript}
@@ -436,7 +447,7 @@ def save_rtmp_loop(
                 if 1 == 1:
                     chunk_data = wav_buffer.read()
                     merged_WAV_F.writeframes(chunk_data)
-                    
+
                 if current_time - chunk_start_time < heconstants.quick_loop_chunk_duration:
                     # Break the while loop if the last chunk duration is less than 5 seconds
                     break

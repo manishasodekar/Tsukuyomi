@@ -13,7 +13,9 @@ from datetime import datetime
 from config.logconfig import get_logger
 from typing import Optional
 from services.kafka.kafka_service import KafkaService
+from fastpunct import FastPunct
 
+fastpunct = FastPunct()
 logger = get_logger()
 logger.setLevel(logging.INFO)
 s3 = S3SERVICE()
@@ -102,6 +104,12 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
 
             if merged_segments:
                 response_json["transcript"] = " ".join([_["text"] for _ in merged_segments])
+
+            transcript = response_json.get("transcript")
+            if transcript:
+                punc_transcript = fastpunct.punct([transcript])[0]
+                if punc_transcript:
+                    response_json["transcript"] = punc_transcript
 
             if s3.check_file_exists(key=f"{conversation_id}/translated_transcript.json"):
                 translated_transcript_content = s3.get_json_file(

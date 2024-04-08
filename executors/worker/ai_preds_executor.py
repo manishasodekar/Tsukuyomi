@@ -242,6 +242,7 @@ class aiPreds:
             webhook_url = message.get("webhook_url")
             api_type = message.get("api_type")
             api_path = message.get("api_path")
+            language = message.get("language", "en")
             triage_ai_preds = None
             triage_ai_suggestion = None
             text = None
@@ -489,6 +490,7 @@ class aiPreds:
                         "encounter_id": None,
                         "provider_id": None,
                         "review_provider_id": None,
+                        "language": language,
                         "completed": False,
                         "exec_duration": 0.0,
                         "start_time": str(start_time),
@@ -518,6 +520,7 @@ class aiPreds:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -765,6 +768,7 @@ class aiPreds:
             api_path = message.get("api_path")
             retry_count = message.get("retry_count")
             failed_state = message.get("failed_state")
+            language = message.get("language", "en")
 
             data = {
                 "es_id": f"{request_id}_FINAL_EXECUTOR",
@@ -784,6 +788,7 @@ class aiPreds:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(datetime.utcnow()),

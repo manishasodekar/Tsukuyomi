@@ -18,7 +18,9 @@ from utils.s3_operation import S3SERVICE
 from utils.send_logs import push_logs
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
+from fastpunct import FastPunct
 
+fastpunct = FastPunct()
 s3 = S3SERVICE()
 producer = KafkaService(group_id="final")
 logger = get_logger()
@@ -143,6 +145,12 @@ class finalExecutor:
                         text = word_pattern.sub('', text)
                         text = re.sub(' +', ' ', text).strip()
                         response_json["transcript"] = text
+
+                    transcript = response_json.get("transcript")
+                    if transcript:
+                        punc_transcript = fastpunct.punct([transcript])[0]
+                        if punc_transcript:
+                            response_json["transcript"] = punc_transcript
 
                     if s3.check_file_exists(key=f"{request_id}/translated_transcript.json"):
                         translated_transcript_content = s3.get_json_file(

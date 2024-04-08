@@ -346,6 +346,8 @@ class soap:
             webhook_url = message.get("webhook_url")
             api_type = message.get("api_type")
             api_path = message.get("api_path")
+            language = message.get("language", "en")
+
             triage_ai_preds = None
 
             segments, last_ai_preds, dominant_language = self.get_merge_ai_preds(conversation_id=conversation_id,
@@ -498,6 +500,7 @@ class soap:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -741,6 +744,7 @@ class soap:
             retry_count = message.get("retry_count")
             api_type = message.get("api_type")
             api_path = message.get("api_path")
+            language = message.get("language", "en")
 
             data = {
                 "es_id": f"{request_id}_FINAL_EXECUTOR",
@@ -759,6 +763,7 @@ class soap:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(datetime.utcnow()),

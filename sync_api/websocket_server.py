@@ -22,7 +22,9 @@ from services.kafka.kafka_service import KafkaService
 from datetime import datetime
 from io import BytesIO
 from pydub import AudioSegment
+from fastpunct import FastPunct
 
+fastpunct = FastPunct()
 s3 = S3SERVICE()
 producer = KafkaService(group_id="soap")
 logger = get_logger()
@@ -49,7 +51,7 @@ def push_logs(care_request_id: str, given_msg: str, he_type: str, req_type: str,
 
 
 # check if PID is running python
-def check_and_start_rtmp(connection_id):
+def check_and_start_rtmp(connection_id, language="en"):
     key = f"{connection_id}/{connection_id}.json"
     IS_FILE_EXIST = s3.check_file_exists(key)
     if IS_FILE_EXIST:
@@ -76,6 +78,7 @@ def check_and_start_rtmp(connection_id):
             "encounter_id": None,
             "provider_id": None,
             "review_provider_id": None,
+            "language": language,
             "completed": False,
             "exec_duration": 0.0,
             "start_time": str(datetime.utcnow()),
@@ -86,7 +89,7 @@ def check_and_start_rtmp(connection_id):
 
 
 # check if PID is running python
-def check_and_start_rtmp_for_connection_id(connection_id, user_type, ws):
+def check_and_start_rtmp_for_connection_id(connection_id, user_type, ws, language="en"):
     pid_for_connection_id = None
     data = None
     try:
@@ -118,7 +121,7 @@ def check_and_start_rtmp_for_connection_id(connection_id, user_type, ws):
         # start rtmp stream saver in background process using gipc
         process = gipc.start_process(
             target=rtmp_saver.save_rtmp_loop,
-            args=(connection_id, user_type, ws),
+            args=(connection_id, user_type, ws, language),
         )
         if data:
             data["pid"] = process.pid
@@ -141,6 +144,7 @@ def websocket_handler(env, start_response):
             uid = message.get("uid")
             req_type = message.get("req_type")
             audio_type = message.get("audio_type")
+            language = message.get("selected_language", "en")
             push_logs(care_request_id=connection_id,
                       given_msg="Websocket has started",
                       he_type=user_type,
@@ -182,9 +186,9 @@ def websocket_handler(env, start_response):
         IS_RTMP_ALREADY_RUNNING = False
         if not req_type:
             if user_type in {"provider", "inclinic"}:
-                IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp(connection_id)
+                IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp(connection_id, language)
                 IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp_for_connection_id(
-                    connection_id, user_type, ws
+                    connection_id, user_type, ws, language
                 )
 
         if req_type and req_type == "healiom_copilot":
@@ -252,11 +256,15 @@ def websocket_handler(env, start_response):
                         wav_buffer = BytesIO()
                         audio.export(wav_buffer, format="wav",
                                      parameters=["-ac", "1", "-ar", "16000", "-sample_fmt", "s16"])
+                        key = f"{connection_id}/{connection_id}_chunk{chunk_count}.wav"
+                        filename = key.split("/")[1]
+                        unique_id = filename.split(".")[0] + "__" + language
+                        wav_buffer.name = filename
                         wav_buffer.seek(0)
                         try:
                             # Send the wav audio data for transcription
                             transcription_result = requests.post(
-                                heconstants.AI_SERVER + "/infer",
+                                heconstants.AI_SERVER + f"/infer?unique_id={unique_id}",
                                 files={"f1": wav_buffer},
                             ).json()["prediction"][0]
 
@@ -279,6 +287,10 @@ def websocket_handler(env, start_response):
 
                             if transcript:
                                 transcript = re.sub(' +', ' ', transcript).strip()
+                                punc_transcript = fastpunct.punct([transcript])[0]
+                                if punc_transcript:
+                                    transcript = punc_transcript
+
                             ws.send(json.dumps({"cc": transcript, "success": True}))
                             chunk_iteration += 1
                             # todo uncomment below code if required
@@ -315,6 +327,7 @@ def websocket_handler(env, start_response):
                                 "encounter_id": None,
                                 "provider_id": None,
                                 "review_provider_id": None,
+                                "language": language,
                                 "completed": False,
                                 "exec_duration": 0.0,
                                 "start_time": str(datetime.utcnow()),
@@ -354,6 +367,7 @@ def websocket_handler(env, start_response):
                                     "encounter_id": None,
                                     "provider_id": None,
                                     "review_provider_id": None,
+                                    "language": language,
                                     "completed": False,
                                     "exec_duration": 0.0,
                                     "start_time": str(datetime.utcnow()),
@@ -432,6 +446,10 @@ def websocket_handler(env, start_response):
                                     long_transcript = pattern.sub('', long_transcript)
                                     long_transcript = word_pattern.sub('', long_transcript)
                                     long_transcript = re.sub(' +', ' ', long_transcript).strip()
+                                    if long_transcript:
+                                        punc_transcript = fastpunct.punct([transcript])[0]
+                                        if punc_transcript:
+                                            long_transcript = punc_transcript
                                     latest_ai_preds_resp['transcript'] = long_transcript
                                 ws.send(json.dumps(latest_ai_preds_resp))
                                 merged_json_key = f"{connection_id}/All_Preds.json"
