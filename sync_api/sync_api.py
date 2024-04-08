@@ -128,7 +128,7 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
         logger.error(msg, trace)
 
 
-def create_task(request_id, webhook_url, audio_url, api_type, clinical_ner_flag):
+def create_task(request_id, webhook_url, audio_url, language, api_type, clinical_ner_flag):
     es_id = f"{request_id}_FILE_DOWNLOADER"
     executor_name = "FILE_DOWNLOADER"
     state = "Init"
@@ -150,6 +150,7 @@ def create_task(request_id, webhook_url, audio_url, api_type, clinical_ner_flag)
         "encounter_id": None,
         "provider_id": None,
         "review_provider_id": None,
+        "language": language,
         "completed": False,
         "exec_duration": 0.0,
         "start_time": str(datetime.utcnow()),
@@ -195,6 +196,7 @@ def create_aipred_task(request_id, webhook_url, text, language, api_type, clinic
         "encounter_id": None,
         "provider_id": None,
         "review_provider_id": None,
+        "language": language,
         "completed": False,
         "exec_duration": 0.0,
         "start_time": str(datetime.utcnow()),
@@ -235,17 +237,21 @@ class clinicalNotes(object):
         sync = sync.lower() == 'true'
         clinical_ner = req.params.get("clinical_ner", "false")
         clinical_ner = clinical_ner.lower() == 'true'
+        language = req.params.get("language", "en")
         if audio_url is None:
             self.logger.error("audio_url query parameter is missing.")
             raise falcon.HTTPError(status=400, description="Audio url is missing.")
+        if language is None:
+            self.logger.error("language param is missing.")
+            raise falcon.HTTPError(status=400, description="language param is missing.")
         request_id = generate_request_id()
         resp.set_header('Request_ID', request_id)
         resp.set_header('WEBHOOK_URL', webhook_url)
         if not sync:
-            resp.media = create_task(request_id, webhook_url, audio_url, api_type="clinical_notes",
+            resp.media = create_task(request_id, webhook_url, audio_url, language, api_type="clinical_notes",
                                      clinical_ner_flag=clinical_ner)
         else:
-            create_task(request_id, webhook_url, audio_url, api_type="clinical_notes",
+            create_task(request_id, webhook_url, audio_url, language, api_type="clinical_notes",
                         clinical_ner_flag=clinical_ner)
             while True:
                 file_path = f"{request_id}/All_Preds.json"
@@ -275,17 +281,21 @@ class Transcription(object):
         sync = sync.lower() == 'true'
         clinical_ner = req.params.get("clinical_ner", "false")
         clinical_ner = clinical_ner.lower() == 'true'
+        language = req.params.get("language", "en")
         if audio_url is None:
             self.logger.error("audio_url query parameter is missing.")
             raise falcon.HTTPError(status=400, description="Audio url is missing.")
+        if language is None:
+            self.logger.error("language param is missing.")
+            raise falcon.HTTPError(status=400, description="language param is missing.")
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
         if not sync:
-            resp.media = create_task(request_id, webhook_url, audio_url, api_type="transcription",
+            resp.media = create_task(request_id, webhook_url, audio_url, language, api_type="transcription",
                                      clinical_ner_flag=clinical_ner)
         else:
-            create_task(request_id, webhook_url, audio_url, api_type="transcription",
+            create_task(request_id, webhook_url, audio_url, language, api_type="transcription",
                         clinical_ner_flag=clinical_ner)
             while True:
                 file_path = f"{request_id}/All_Preds.json"
@@ -316,10 +326,13 @@ class AiPred(object):
         clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
-        language = data.get("language")
+        language = data.get("language", "en")
         if text is None:
             self.logger.error("text input is missing.")
             raise falcon.HTTPError(status=400, description="text input is missing.")
+        if language is None:
+            self.logger.error("language input is missing.")
+            raise falcon.HTTPError(status=400, description="language input is missing.")
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
@@ -358,10 +371,13 @@ class Summary(object):
         clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
-        language = data.get("language")
+        language = data.get("language", "en")
         if text is None:
             self.logger.error("text input is missing.")
             raise falcon.HTTPError(status=400, description="text input is missing.")
+        if language is None:
+            self.logger.error("language input is missing.")
+            raise falcon.HTTPError(status=400, description="language input is missing.")
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
