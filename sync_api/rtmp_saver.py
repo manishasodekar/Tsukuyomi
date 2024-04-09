@@ -419,7 +419,7 @@ def save_rtmp_loop(
                         #     punctuation_server = "http://127.0.0.1:2001"
                         #     punc_transcript = requests.post(
                         #         punctuation_server + f"/punctuation/infer",
-                        #         json=payload)[0]
+                        #         json=payload)["prediction"][0]
                         #     transcript = punc_transcript
                     websocket.send(json.dumps({"cc": transcript, "success": True}))
                     transcript_key = f"{stream_key}/transcript.json"

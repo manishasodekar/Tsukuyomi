@@ -425,12 +425,15 @@ class soap:
                 ]
 
                 if subjective_summary:
-                    payload = {
-                        "data": subjective_summary
-                    }
-                    subjective_summary = requests.post(
-                        heconstants.AI_SERVER + f"/punctuation/infer",
-                        json=payload)
+                    try:
+                        payload = {
+                            "data": subjective_summary
+                        }
+                        subjective_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload)["prediction"]
+                    except:
+                        pass
 
                 # objective_summary
                 try:
@@ -446,12 +449,15 @@ class soap:
                 ]
 
                 if objective_summary:
-                    payload = {
-                        "data": objective_summary
-                    }
-                    objective_summary = requests.post(
-                        heconstants.AI_SERVER + f"/punctuation/infer",
-                        json=payload)
+                    try:
+                        payload = {
+                            "data": objective_summary
+                        }
+                        objective_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload)["prediction"]
+                    except:
+                        pass
 
                 # clinical_assessment_summary
                 try:
@@ -469,12 +475,15 @@ class soap:
                 ]
 
                 if clinical_assessment_summary:
-                    payload = {
-                        "data": clinical_assessment_summary
-                    }
-                    clinical_assessment_summary = requests.post(
-                        heconstants.AI_SERVER + f"/punctuation/infer",
-                        json=payload)
+                    try:
+                        payload = {
+                            "data": clinical_assessment_summary
+                        }
+                        clinical_assessment_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload)["prediction"]
+                    except:
+                        pass
 
                 # care_plan_summary
                 try:
@@ -490,12 +499,15 @@ class soap:
                 ]
 
                 if care_plan_summary:
-                    payload = {
-                        "data": care_plan_summary
-                    }
-                    care_plan_summary = requests.post(
-                        heconstants.AI_SERVER + f"/punctuation/infer",
-                        json=payload)
+                    try:
+                        payload = {
+                            "data": care_plan_summary
+                        }
+                        care_plan_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload)["prediction"]
+                    except:
+                        pass
 
                 data = {
                     "subjectiveClinicalSummary": subjective_summary,

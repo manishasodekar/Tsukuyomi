@@ -329,7 +329,7 @@ class aiPreds:
                         }
                         punc_transcript = requests.post(
                             heconstants.AI_SERVER + f"/punctuation/infer",
-                            json=payload)[0]
+                            json=payload)['prediction'][0]
                         if punc_transcript:
                             text = punc_transcript
 

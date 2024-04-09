@@ -155,7 +155,7 @@ class finalExecutor:
                         if transcript:
                             punc_transcript = requests.post(
                                 heconstants.AI_SERVER + f"/punctuation/infer",
-                                json=payload)[0]
+                                json=payload)["prediction"][0]
                             if punc_transcript:
                                 response_json["transcript"] = punc_transcript
 
