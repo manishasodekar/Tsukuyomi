@@ -6,14 +6,14 @@ from typing import Optional
 import nltk
 
 import openai
+import requests
+
 from utils import heconstants
 from utils.s3_operation import S3SERVICE
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
-from fastpunct import FastPunct
 
 # The default language is 'english'
-fastpunct = FastPunct()
 nltk.download('punkt')
 s3 = S3SERVICE()
 producer = KafkaService(group_id="soap")
@@ -425,9 +425,12 @@ class soap:
                 ]
 
                 if subjective_summary:
-                    punc_transcript = fastpunct.punct(subjective_summary)
-                    if punc_transcript:
-                        subjective_summary = punc_transcript
+                    payload = {
+                        "data": subjective_summary
+                    }
+                    subjective_summary = requests.post(
+                        heconstants.AI_SERVER + f"/punctuation/infer",
+                        json=payload)
 
                 # objective_summary
                 try:
@@ -443,9 +446,12 @@ class soap:
                 ]
 
                 if objective_summary:
-                    punc_transcript = fastpunct.punct(objective_summary)
-                    if punc_transcript:
-                        objective_summary = punc_transcript
+                    payload = {
+                        "data": objective_summary
+                    }
+                    objective_summary = requests.post(
+                        heconstants.AI_SERVER + f"/punctuation/infer",
+                        json=payload)
 
                 # clinical_assessment_summary
                 try:
@@ -463,9 +469,12 @@ class soap:
                 ]
 
                 if clinical_assessment_summary:
-                    punc_transcript = fastpunct.punct(clinical_assessment_summary)
-                    if punc_transcript:
-                        clinical_assessment_summary = punc_transcript
+                    payload = {
+                        "data": clinical_assessment_summary
+                    }
+                    clinical_assessment_summary = requests.post(
+                        heconstants.AI_SERVER + f"/punctuation/infer",
+                        json=payload)
 
                 # care_plan_summary
                 try:
@@ -481,9 +490,12 @@ class soap:
                 ]
 
                 if care_plan_summary:
-                    punc_transcript = fastpunct.punct(care_plan_summary)
-                    if punc_transcript:
-                        care_plan_summary = punc_transcript
+                    payload = {
+                        "data": care_plan_summary
+                    }
+                    care_plan_summary = requests.post(
+                        heconstants.AI_SERVER + f"/punctuation/infer",
+                        json=payload)
 
                 data = {
                     "subjectiveClinicalSummary": subjective_summary,

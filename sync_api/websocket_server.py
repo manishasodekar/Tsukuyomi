@@ -446,10 +446,6 @@ def websocket_handler(env, start_response):
                                     long_transcript = pattern.sub('', long_transcript)
                                     long_transcript = word_pattern.sub('', long_transcript)
                                     long_transcript = re.sub(' +', ' ', long_transcript).strip()
-                                    # if long_transcript:
-                                    #     punc_transcript = fastpunct.punct([transcript])[0]
-                                    #     if punc_transcript:
-                                    #         long_transcript = punc_transcript
                                     latest_ai_preds_resp['transcript'] = long_transcript
                                 ws.send(json.dumps(latest_ai_preds_resp))
                                 merged_json_key = f"{connection_id}/All_Preds.json"

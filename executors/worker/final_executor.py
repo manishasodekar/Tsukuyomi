@@ -50,6 +50,7 @@ class finalExecutor:
             api_type = message.get("api_type")
             file_path = message.get("file_path")
             failed_state = message.get("failed_state")
+            language = message.get("language")
 
             logger.info("MERGING All AIPREDS")
 
@@ -146,11 +147,17 @@ class finalExecutor:
                         text = re.sub(' +', ' ', text).strip()
                         response_json["transcript"] = text
 
-                    transcript = response_json.get("transcript")
-                    if transcript:
-                        punc_transcript = fastpunct.punct([transcript])[0]
-                        if punc_transcript:
-                            response_json["transcript"] = punc_transcript
+                    if language == "en":
+                        transcript = response_json.get("transcript")
+                        payload = {
+                            "data": [transcript]
+                        }
+                        if transcript:
+                            punc_transcript = requests.post(
+                                heconstants.AI_SERVER + f"/punctuation/infer",
+                                json=payload)[0]
+                            if punc_transcript:
+                                response_json["transcript"] = punc_transcript
 
                     if s3.check_file_exists(key=f"{request_id}/translated_transcript.json"):
                         translated_transcript_content = s3.get_json_file(
@@ -167,8 +174,9 @@ class finalExecutor:
 
                     merged_json_key = f"{request_id}/All_Preds.json"
                     s3.upload_to_s3(merged_json_key, response_json, is_json=True)
-
+                    logger.info(f'MERGED AI PREDS')
                     if webhook_url:
+                        logger.info(f'SENDING WEBHOOKS')
                         if len(response_json["transcript"]) > 0 and not failed_state:
                             status_code, response_text = self.send_webhook(webhook_url, response_json)
                             logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
