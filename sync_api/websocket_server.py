@@ -22,9 +22,7 @@ from services.kafka.kafka_service import KafkaService
 from datetime import datetime
 from io import BytesIO
 from pydub import AudioSegment
-# from fastpunct import FastPunct
 
-# fastpunct = FastPunct()
 s3 = S3SERVICE()
 producer = KafkaService(group_id="soap")
 logger = get_logger()
@@ -287,9 +285,6 @@ def websocket_handler(env, start_response):
 
                             if transcript:
                                 transcript = re.sub(' +', ' ', transcript).strip()
-                                # punc_transcript = fastpunct.punct([transcript])[0]
-                                # if punc_transcript:
-                                #     transcript = punc_transcript
 
                             ws.send(json.dumps({"cc": transcript, "success": True}))
                             chunk_iteration += 1

@@ -18,9 +18,7 @@ from config.logconfig import get_logger
 from botocore.exceptions import NoCredentialsError
 from gevent import Timeout
 from utils import heconstants
-from fastpunct import FastPunct
 
-fastpunct = FastPunct()
 logger = get_logger()
 logger.setLevel(logging.INFO)
 
@@ -413,8 +411,14 @@ def save_rtmp_loop(
                 try:
                     if transcript:
                         transcript = re.sub(' +', ' ', transcript).strip()
-                        punc_transcript = fastpunct.punct([transcript])[0]
-                        if punc_transcript:
+                        if transcript != "" and language == "en":
+                            payload = {
+                                "data": [transcript]
+                            }
+                            punctuation_server = "http://127.0.0.1:2001"
+                            punc_transcript = requests.post(
+                                punctuation_server + f"/punctuation/infer",
+                                json=payload)[0]
                             transcript = punc_transcript
                     websocket.send(json.dumps({"cc": transcript, "success": True}))
                     transcript_key = f"{stream_key}/transcript.json"
