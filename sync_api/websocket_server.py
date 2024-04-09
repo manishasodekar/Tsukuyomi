@@ -142,7 +142,7 @@ def websocket_handler(env, start_response):
             uid = message.get("uid")
             req_type = message.get("req_type")
             audio_type = message.get("audio_type")
-            language = message.get("selected_language", "en")
+            language = message.get("selected_language", "en").lower()
             push_logs(care_request_id=connection_id,
                       given_msg="Websocket has started",
                       he_type=user_type,
