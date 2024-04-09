@@ -398,6 +398,15 @@ class soap:
 
             if dominant_language and dominant_language != "en":
                 interest_texts = self.translate_transcript_open_ai(interest_texts, dominant_language)
+                # if interest_texts:
+                #     payload = {
+                #         "data": [interest_texts]
+                #     }
+                #     punc_transcript = requests.post(
+                #         heconstants.AI_SERVER + f"/punctuation/infer",
+                #         json=payload).json()['prediction'][0]
+                #     if punc_transcript:
+                #         interest_texts = punc_transcript
                 transcript_data = {"transcript": interest_texts, "language": "en"}
                 s3.upload_to_s3(f"{conversation_id}/translated_transcript.json", transcript_data, is_json=True)
 
@@ -431,7 +440,7 @@ class soap:
                         }
                         subjective_summary = requests.post(
                             heconstants.AI_SERVER + f"/punctuation/infer",
-                            json=payload)["prediction"]
+                            json=payload).json()["prediction"]
                     except:
                         pass
 
@@ -455,7 +464,7 @@ class soap:
                         }
                         objective_summary = requests.post(
                             heconstants.AI_SERVER + f"/punctuation/infer",
-                            json=payload)["prediction"]
+                            json=payload).json()["prediction"]
                     except:
                         pass
 
@@ -481,7 +490,7 @@ class soap:
                         }
                         clinical_assessment_summary = requests.post(
                             heconstants.AI_SERVER + f"/punctuation/infer",
-                            json=payload)["prediction"]
+                            json=payload).json()["prediction"]
                     except:
                         pass
 
@@ -505,7 +514,7 @@ class soap:
                         }
                         care_plan_summary = requests.post(
                             heconstants.AI_SERVER + f"/punctuation/infer",
-                            json=payload)["prediction"]
+                            json=payload).json()["prediction"]
                     except:
                         pass
 

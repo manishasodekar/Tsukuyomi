@@ -105,16 +105,16 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
                 response_json["transcript"] = " ".join([_["text"] for _ in merged_segments])
 
             transcript = response_json.get("transcript")
-            if transcript:
-                payload = {
-                    "data": [transcript]
-                }
-                punctuation_server = "http://127.0.0.1:2001"
-                punc_transcript = requests.post(
-                    punctuation_server + f"/infer",
-                    json=payload)['prediction'][0]
-                if punc_transcript:
-                    response_json["transcript"] = punc_transcript
+            # if transcript:
+            #     payload = {
+            #         "data": [transcript]
+            #     }
+            #     punctuation_server = "http://127.0.0.1:2001"
+            #     punc_transcript = requests.post(
+            #         punctuation_server + f"/infer",
+            #         json=payload).json()['prediction'][0]
+            #     if punc_transcript:
+            #         response_json["transcript"] = punc_transcript
 
             if s3.check_file_exists(key=f"{conversation_id}/translated_transcript.json"):
                 translated_transcript_content = s3.get_json_file(

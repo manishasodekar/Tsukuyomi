@@ -323,15 +323,15 @@ class aiPreds:
 
                 if dominant_language and dominant_language != "en":
                     text = self.translate_transcript_open_ai(text, dominant_language)
-                    if text:
-                        payload = {
-                            "data": [text]
-                        }
-                        punc_transcript = requests.post(
-                            heconstants.AI_SERVER + f"/punctuation/infer",
-                            json=payload)['prediction'][0]
-                        if punc_transcript:
-                            text = punc_transcript
+                    # if text:
+                    #     payload = {
+                    #         "data": [text]
+                    #     }
+                    #     punc_transcript = requests.post(
+                    #         heconstants.AI_SERVER + f"/punctuation/infer",
+                    #         json=payload).json()['prediction'][0]
+                    #     if punc_transcript:
+                    #         text = punc_transcript
 
                     transcript_data = {"transcript": text, "language": "en"}
                     s3.upload_to_s3(f"{conversation_id}/translated_transcript.json", transcript_data, is_json=True)

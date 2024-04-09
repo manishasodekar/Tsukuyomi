@@ -152,12 +152,12 @@ class finalExecutor:
                         payload = {
                             "data": [transcript]
                         }
-                        if transcript:
-                            punc_transcript = requests.post(
-                                heconstants.AI_SERVER + f"/punctuation/infer",
-                                json=payload)["prediction"][0]
-                            if punc_transcript:
-                                response_json["transcript"] = punc_transcript
+                        # if transcript:
+                        #     punc_transcript = requests.post(
+                        #         heconstants.AI_SERVER + f"/punctuation/infer",
+                        #         json=payload).json()["prediction"][0]
+                        #     if punc_transcript:
+                        #         response_json["transcript"] = punc_transcript
 
                     if s3.check_file_exists(key=f"{request_id}/translated_transcript.json"):
                         translated_transcript_content = s3.get_json_file(
