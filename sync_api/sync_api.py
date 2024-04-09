@@ -1,3 +1,4 @@
+import requests
 from gevent import monkey
 
 monkey.patch_all()
@@ -13,9 +14,7 @@ from datetime import datetime
 from config.logconfig import get_logger
 from typing import Optional
 from services.kafka.kafka_service import KafkaService
-from fastpunct import FastPunct
 
-fastpunct = FastPunct()
 logger = get_logger()
 logger.setLevel(logging.INFO)
 s3 = S3SERVICE()
@@ -107,7 +106,13 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
 
             transcript = response_json.get("transcript")
             if transcript:
-                punc_transcript = fastpunct.punct([transcript])[0]
+                payload = {
+                    "data": [transcript]
+                }
+                punctuation_server = "http://127.0.0.1:2001"
+                punc_transcript = requests.post(
+                    punctuation_server + f"/infer",
+                    json=payload)['prediction'][0]
                 if punc_transcript:
                     response_json["transcript"] = punc_transcript
 
