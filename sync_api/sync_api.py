@@ -1,4 +1,3 @@
-import requests
 from gevent import monkey
 
 monkey.patch_all()
@@ -7,6 +6,7 @@ import uuid
 import falcon
 import traceback
 import logging
+import requests
 from utils.s3_operation import S3SERVICE
 from typing import Optional
 from utils import heconstants
