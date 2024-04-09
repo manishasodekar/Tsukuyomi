@@ -314,7 +314,7 @@ def save_rtmp_loop(
         stream_key,
         user_type,
         websocket,
-        language="en",
+        language,
         stream_url=heconstants.RTMP_SERVER_URL,
         DATA_DIR="healiom_websocket_asr",
 ):
@@ -399,6 +399,7 @@ def save_rtmp_loop(
                 segments = transcription_result.get("segments")
                 if segments:
                     text = segments[0].get("text")
+                    print("text", text)
                     if text:
                         if transcript != "":
                             transcript += " " + text
@@ -411,15 +412,15 @@ def save_rtmp_loop(
                 try:
                     if transcript:
                         transcript = re.sub(' +', ' ', transcript).strip()
-                        if transcript != "" and language == "en":
-                            payload = {
-                                "data": [transcript]
-                            }
-                            punctuation_server = "http://127.0.0.1:2001"
-                            punc_transcript = requests.post(
-                                punctuation_server + f"/punctuation/infer",
-                                json=payload)[0]
-                            transcript = punc_transcript
+                        # if transcript != "" and language == "en":
+                        #     payload = {
+                        #         "data": [transcript]
+                        #     }
+                        #     punctuation_server = "http://127.0.0.1:2001"
+                        #     punc_transcript = requests.post(
+                        #         punctuation_server + f"/punctuation/infer",
+                        #         json=payload)[0]
+                        #     transcript = punc_transcript
                     websocket.send(json.dumps({"cc": transcript, "success": True}))
                     transcript_key = f"{stream_key}/transcript.json"
                     transcript_data = {"transcript": transcript}
