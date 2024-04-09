@@ -7,6 +7,7 @@ import os
 import time
 import gipc
 import json
+import uuid
 import wave
 import requests
 import traceback
@@ -254,10 +255,8 @@ def websocket_handler(env, start_response):
                         wav_buffer = BytesIO()
                         audio.export(wav_buffer, format="wav",
                                      parameters=["-ac", "1", "-ar", "16000", "-sample_fmt", "s16"])
-                        key = f"{connection_id}/{connection_id}_chunk{chunk_count}.wav"
-                        filename = key.split("/")[1]
-                        unique_id = filename.split(".")[0] + "___" + language
-                        wav_buffer.name = filename
+                        unique_id = f"{uuid.uuid4()}___{language}"
+                        wav_buffer.name = unique_id + ".wav"
                         wav_buffer.seek(0)
                         try:
                             # Send the wav audio data for transcription
