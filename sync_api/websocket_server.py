@@ -256,7 +256,7 @@ def websocket_handler(env, start_response):
                                      parameters=["-ac", "1", "-ar", "16000", "-sample_fmt", "s16"])
                         key = f"{connection_id}/{connection_id}_chunk{chunk_count}.wav"
                         filename = key.split("/")[1]
-                        unique_id = filename.split(".")[0] + "__" + language
+                        unique_id = filename.split(".")[0] + "___" + language
                         wav_buffer.name = filename
                         wav_buffer.seek(0)
                         try:

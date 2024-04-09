@@ -386,7 +386,7 @@ def save_rtmp_loop(
                 WAV_F.close()
                 key = f"{stream_key}/{stream_key}_chunk{chunk_count}.wav"
                 filename = key.split("/")[1]
-                unique_id = filename.split(".")[0] + "__" + language
+                unique_id = filename.split(".")[0] + "___" + language
                 wav_buffer.name = filename
                 wav_buffer.seek(0)  # Reset buffer pointer to the beginning
 

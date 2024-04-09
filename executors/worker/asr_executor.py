@@ -133,7 +133,7 @@ class ASRExecutor:
             duration = duration_in_milliseconds / 1000.0
             audio_stream.name = file_path.split("/")[1]
             filename = file_path.split("/")[1]
-            unique_id = filename.split(".")[0] + "__" + language
+            unique_id = filename.split(".")[0] + "___" + language
             audio_stream.seek(0)
             transcription_result = requests.post(
                 heconstants.AI_SERVER + f"/transcribe/infer?unique_id={unique_id}",
@@ -284,7 +284,7 @@ class ASRExecutor:
                 duration = duration_in_milliseconds / 1000.0
                 audio_stream.name = file_path.split("/")[1]
                 filename = file_path.split("/")[1]
-                unique_id = filename.split(".")[0] + "__" + language
+                unique_id = filename.split(".")[0] + "___" + language
                 audio_stream.seek(0)
                 transcription_result = requests.post(
                     heconstants.AI_SERVER + f"/transcribe/infer?unique_id={unique_id}",
