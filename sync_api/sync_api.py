@@ -59,6 +59,10 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
                 "objectiveClinicalSummary": [],
                 "clinicalAssessment": [],
                 "carePlanSuggested": [],
+                "chiefComplaints": [],
+                "presentIllness": [],
+                "pastMedicalHistory": [],
+                "reviewOfSystems": []
             },
         }
         response_json = {}
@@ -92,8 +96,8 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
                                 "summaries": {}
                             }
                             for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary",
-                                                 "clinicalAssessment",
-                                                 "carePlanSuggested"]:
+                                                 "clinicalAssessment", "carePlanSuggested", "chiefComplaints",
+                                                 "presentIllness", "pastMedicalHistory", "reviewOfSystems"]:
                                 summary["summaries"][summary_type] = summary_content.get(summary_type)
                             merged_ai_preds.update(summary)
                     response_json["ai_preds"] = merged_ai_preds

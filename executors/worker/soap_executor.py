@@ -112,6 +112,14 @@ class soap:
                 result["clinicalAssessmentSummary"] = content
             elif title == "plan":
                 result["carePlanSummary"] = content
+            elif title == "chief complaints":
+                result["chiefComplaints"] = content
+            elif title == "present illness":
+                result["presentIllness"] = content
+            elif title == "past medical history":
+                result["pastMedicalHistory"] = content
+            elif title == "review of systems":
+                result["reviewOfSystems"] = content
 
         return result
 
@@ -122,11 +130,12 @@ class soap:
                     {
                         "role": "system",
                         "content": """Summarize the medical case from given PATIENT PROVIDER CONVERSATION and AI 
-                        TRIAGE CONVERSATION in the following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN. It is 
-                        important to maintain accuracy and relevance to the medical context and omit any non-medical 
-                        chatter, assumptions, or speculations. Provide the asked information in a clear and concise 
-                        manner, structured, and remember to generate results in points. Make sure any information is 
-                        only present in one section (basically no duplicate information should be there). You are not 
+                        TRIAGE CONVERSATION in the following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN, 
+                        CHIEF COMPLAINTS, PRESENT ILLNESS, PAST MEDICAL HISTORY, REVIEW OF SYSTEMS. It is important 
+                        to maintain accuracy and relevance to the medical context and omit any non-medical chatter, 
+                        assumptions, or speculations. Provide the asked information in a clear and concise manner, 
+                        structured, and remember to generate results in points. Make sure any information is only 
+                        present in one section (basically no duplicate information should be there). You are not 
                         supposed to assume anything and don't use any hypothesis. This ensures clarity and precision 
                         in the medical summary, focusing solely on the facts presented.""",
                     },
@@ -140,13 +149,14 @@ class soap:
                     {
                         "role": "system",
                         "content": """Summarize the medical case from given PATIENT PROVIDER CONVERSATION in the 
-                        following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN. It is important to maintain 
-                        accuracy and relevance to the medical context and omit any non-medical chatter, assumptions, 
-                        or speculations. Provide the asked information in a clear and concise manner, structured, 
-                        and remember to generate results in points. Make sure any information is only present in one 
-                        section (basically no duplicate information should be there). You are not supposed to assume 
-                        anything and don't use any hypothesis. This ensures clarity and precision in the medical 
-                        summary, focusing solely on the facts presented.""",
+                        following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN, CHIEF COMPLAINTS, PRESENT ILLNESS, 
+                        PAST MEDICAL HISTORY, REVIEW OF SYSTEMS. It is important to maintain accuracy and relevance 
+                        to the medical context and omit any non-medical chatter, assumptions, or speculations. 
+                        Provide the asked information in a clear and concise manner, structured, and remember to 
+                        generate results in points. Make sure any information is only present in one section (
+                        basically no duplicate information should be there). You are not supposed to assume anything 
+                        and don't use any hypothesis. This ensures clarity and precision in the medical summary, 
+                        focusing solely on the facts presented.""",
                     },
                     {"role": "user", "content": f"""PATIENT PROVIDER CONVERSATION: {str(transcript_text)}"""},
                     # {"role": "user", "content": f"TEXT: {text}"},
@@ -253,6 +263,10 @@ class soap:
                     "objectiveClinicalSummary": [],
                     "clinicalAssessment": [],
                     "carePlanSuggested": [],
+                    "chiefComplaints": [],
+                    "presentIllness": [],
+                    "pastMedicalHistory": [],
+                    "reviewOfSystems": []
                 },
             }
 
@@ -386,6 +400,10 @@ class soap:
 
             clinical_assessment_summary = []
             care_plan_summary = []
+            chief_complaints_summary = []
+            present_illness_summary = []
+            past_medical_history_summary = []
+            review_of_systems_summary = []
 
             if api_type == "soap":
                 input_text = s3.get_json_file(s3_filename=file_path)
@@ -518,11 +536,111 @@ class soap:
                     except:
                         pass
 
+                # chief_complaints_summary
+                try:
+                    chief_complaints_summary += nltk.sent_tokenize(summaries["chiefComplaints"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (chiefComplaints) ::  {e}")
+                    pass
+
+                chief_complaints_summary = [
+                    line
+                    for line in chief_complaints_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if chief_complaints_summary:
+                    try:
+                        payload = {
+                            "data": chief_complaints_summary
+                        }
+                        chief_complaints_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # present_illness_summary
+                try:
+                    present_illness_summary += nltk.sent_tokenize(summaries["presentIllness"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (chiefComplaints) ::  {e}")
+                    pass
+
+                present_illness_summary = [
+                    line
+                    for line in present_illness_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if present_illness_summary:
+                    try:
+                        payload = {
+                            "data": present_illness_summary
+                        }
+                        present_illness_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # past_medical_history_summary
+                try:
+                    past_medical_history_summary += nltk.sent_tokenize(summaries["pastMedicalHistory"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (chiefComplaints) ::  {e}")
+                    pass
+
+                past_medical_history_summary = [
+                    line
+                    for line in past_medical_history_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if past_medical_history_summary:
+                    try:
+                        payload = {
+                            "data": past_medical_history_summary
+                        }
+                        past_medical_history_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # review_of_systems_summary
+                try:
+                    review_of_systems_summary += nltk.sent_tokenize(summaries["reviewOfSystems"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (chiefComplaints) ::  {e}")
+                    pass
+
+                review_of_systems_summary = [
+                    line
+                    for line in review_of_systems_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if review_of_systems_summary:
+                    try:
+                        payload = {
+                            "data": review_of_systems_summary
+                        }
+                        review_of_systems_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
                 data = {
                     "subjectiveClinicalSummary": subjective_summary,
                     "objectiveClinicalSummary": objective_summary,
                     "clinicalAssessment": clinical_assessment_summary,
-                    "carePlanSuggested": care_plan_summary
+                    "carePlanSuggested": care_plan_summary,
+                    "chiefComplaints": chief_complaints_summary,
+                    "presentIllness": present_illness_summary,
+                    "pastMedicalHistory": past_medical_history_summary,
+                    "reviewOfSystems": review_of_systems_summary
                 }
 
                 s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
@@ -533,7 +651,12 @@ class soap:
                     "subjectiveClinicalSummary": subjective_summary,
                     "objectiveClinicalSummary": objective_summary,
                     "clinicalAssessment": clinical_assessment_summary,
-                    "carePlanSuggested": care_plan_summary
+                    "carePlanSuggested": care_plan_summary,
+                    "chiefComplaints": chief_complaints_summary,
+                    "presentIllness": present_illness_summary,
+                    "pastMedicalHistory": past_medical_history_summary,
+                    "reviewOfSystems": review_of_systems_summary
+
                 }
                 s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
                 self.create_delivery_task(message=message)

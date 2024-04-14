@@ -310,6 +310,10 @@ class aiPreds:
                     "objectiveClinicalSummary": [],
                     "clinicalAssessment": [],
                     "carePlanSuggested": [],
+                    "chiefComplaints": [],
+                    "presentIllness": [],
+                    "pastMedicalHistory": [],
+                    "reviewOfSystems": []
                 },
             }
 

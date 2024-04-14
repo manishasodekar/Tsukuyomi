@@ -18,9 +18,7 @@ from utils.s3_operation import S3SERVICE
 from utils.send_logs import push_logs
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
-from fastpunct import FastPunct
 
-fastpunct = FastPunct()
 s3 = S3SERVICE()
 producer = KafkaService(group_id="final")
 logger = get_logger()
@@ -82,6 +80,10 @@ class finalExecutor:
                     "objectiveClinicalSummary": [],
                     "clinicalAssessment": [],
                     "carePlanSuggested": [],
+                    "chiefComplaints": [],
+                    "presentIllness": [],
+                    "pastMedicalHistory": [],
+                    "reviewOfSystems": []
                 },
             }
             response_json = {"request_id": request_id}
@@ -120,8 +122,8 @@ class finalExecutor:
                                     "summaries": {}
                                 }
                                 for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary",
-                                                     "clinicalAssessment",
-                                                     "carePlanSuggested"]:
+                                                     "clinicalAssessment", "carePlanSuggested", "chiefComplaints",
+                                                     "presentIllness", "pastMedicalHistory", "reviewOfSystems"]:
                                     summary["summaries"][summary_type] = summary_content.get(summary_type)
                                 merged_ai_preds.update(summary)
 
