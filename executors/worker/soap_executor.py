@@ -216,7 +216,7 @@ class soap:
                         messages=messages,
                     )
                     translated_text = response.choices[0]["message"]["content"]
-                    logger.info(f"translated_text :: {translated_text}")
+                    # logger.info(f"translated_text :: {translated_text}")
                     # extracted_info = json.loads(
                     #     response.choices[0]["message"]["function_call"]["arguments"]
                     # )
@@ -225,6 +225,48 @@ class soap:
                 except Exception as ex:
                     logger.error(ex)
                     pass
+        except Exception as exc:
+            msg = "Failed to get translate conversation from OPEN AI :: {}".format(exc)
+            logger.error(msg)
+
+    def translate_summary_open_ai(self,
+                                  summaries,
+                                  output_language="en",
+                                  min_length=30,
+                                  ):
+        try:
+            converted_data = {}
+            for k, _value in summaries.items():
+                text = " ".join(_value)
+                messages = [
+                    {
+                        "role": "system",
+                        "content": f"""Please translate the following conversation from English to {output_language}.""",
+                    },
+                    {"role": "user", "content": f"{text}"},
+                ]
+
+                for model_name in ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]:
+                    try:
+                        response = openai.ChatCompletion.create(
+                            model=model_name,
+                            messages=messages,
+                        )
+                        translated_text = response.choices[0]["message"]["content"]
+                        logger.info(f"translated_text :: {translated_text}")
+                        # sentences = [sentence.strip() + '.' for sentence in translated_text.split('.') if sentence]
+                        # logger.info(f"sentences :: {sentences}")
+                        converted_data[k] = [translated_text]
+                        # extracted_info = json.loads(
+                        #     response.choices[0]["message"]["function_call"]["arguments"]
+                        # )
+                        break
+                    except Exception as ex:
+                        logger.error(ex)
+                        pass
+
+            return converted_data
+
         except Exception as exc:
             msg = "Failed to get translate conversation from OPEN AI :: {}".format(exc)
             logger.error(msg)
@@ -364,7 +406,8 @@ class soap:
             api_type = message.get("api_type")
             api_path = message.get("api_path")
             language = message.get("language", "en")
-
+            output_language = message.get("output_language", "en")
+            print("output_language ::", output_language)
             triage_ai_preds = None
 
             segments, last_ai_preds, dominant_language = self.get_merge_ai_preds(conversation_id=conversation_id,
@@ -643,6 +686,11 @@ class soap:
                     "reviewOfSystems": review_of_systems_summary
                 }
 
+                if output_language != "en":
+                    logger.info(f"Summary translation to {output_language}")
+                    s3.upload_to_s3(f"{conversation_id}/soap_en.json", data, is_json=True)
+                    data = self.translate_summary_open_ai(summaries=data, output_language=output_language)
+
                 s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
                 self.create_delivery_task(message=message)
 
@@ -658,6 +706,11 @@ class soap:
                     "reviewOfSystems": review_of_systems_summary
 
                 }
+
+                if output_language != "en":
+                    s3.upload_to_s3(f"{conversation_id}/soap_en.json", data, is_json=True)
+                    data = self.translate_summary_open_ai(summaries=data, output_language=output_language)
+
                 s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
                 self.create_delivery_task(message=message)
 
@@ -681,6 +734,7 @@ class soap:
                 "provider_id": None,
                 "review_provider_id": None,
                 "language": language,
+                "output_language": output_language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),

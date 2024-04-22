@@ -265,6 +265,7 @@ class ASRExecutor:
             api_type = message.get("api_type")
             api_path = message.get("api_path")
             language = message.get("language", "en")
+            output_language = message.get("output_language", "en")
 
             received_at = time.time()
 
@@ -315,6 +316,7 @@ class ASRExecutor:
                     "success": True,
                     "audio_path": file_path,
                     "language": language,
+                    "output_language": output_language,
                     "retry_count": 0
                     }
             s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
@@ -337,6 +339,7 @@ class ASRExecutor:
                     "provider_id": None,
                     "review_provider_id": None,
                     "language": language,
+                    "output_language": output_language,
                     "completed": False,
                     "exec_duration": 0.0,
                     "start_time": str(start_time),
@@ -356,6 +359,7 @@ class ASRExecutor:
                     "success": False,
                     "audio_path": file_path,
                     "language": language,
+                    "output_language": output_language,
                     "retry_count": 0
                     }
             s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
@@ -376,6 +380,7 @@ class ASRExecutor:
                 "provider_id": None,
                 "review_provider_id": None,
                 "language": language,
+                "output_language": output_language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -405,6 +410,7 @@ class ASRExecutor:
             api_type = message.get("api_type")
             api_path = message.get("api_path")
             language = message.get("language", "en")
+            output_language = message.get("output_language", "en")
 
             data = {
                 "es_id": f"{request_id}_FINAL_EXECUTOR",
@@ -424,6 +430,7 @@ class ASRExecutor:
                 "provider_id": None,
                 "review_provider_id": None,
                 "language": language,
+                "output_language": output_language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(datetime.utcnow()),

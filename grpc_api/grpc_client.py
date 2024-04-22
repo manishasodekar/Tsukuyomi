@@ -54,44 +54,48 @@ class AudioCapture:
                     time.sleep(max(0, duration - (time.time() - start_time)))
 
 
-def stream_audio(server_address='localhost:50051', audio_source=None):
+def stream_audio(server_address='grpc.healiom-service.com:50051', audio_source=None):
     """
     Streams audio to the transcription server, from either a microphone or a local audio file.
     :param server_address: Address of the gRPC server.
     :param audio_source: Path to a local audio file or None to capture from microphone.
     """
-    channel = grpc.insecure_channel(server_address)
-    stub = pb2_grpc.TranscriptionServiceStub(channel)
 
-    audio_capture = AudioCapture(source=audio_source)
+    try:
+        channel = grpc.insecure_channel(server_address)
+        stub = pb2_grpc.TranscriptionServiceStub(channel)
 
-    def generate_audio_chunks():
-        for chunk in audio_capture.capture_chunks():
-            yield pb2.AudioChunk(audio_content=chunk)
+        audio_capture = AudioCapture(source=audio_source)
 
-    last_preds_sent_at = time.time()
-    last_trans_sent_at = time.time()
-    responses = stub.StreamTranscription(generate_audio_chunks())
-    for response in responses:
-        print("Quick CC:", response.cc)
-        conversation_id = response.conversation_id
-        latest_ai_preds_resp = None
-        if time.time() - last_preds_sent_at >= 10:
-            ai_preds_resp = requests.get(
-                heconstants.SYNC_SERVER + f"/history?conversation_id={conversation_id}"
-            )
-            if ai_preds_resp.status_code == 200:
-                latest_ai_preds_resp = json.loads(ai_preds_resp.text)
-            last_preds_sent_at = time.time()
+        def generate_audio_chunks():
+            for chunk in audio_capture.capture_chunks():
+                yield pb2.AudioChunk(audio_content=chunk)
 
-        elif time.time() - last_trans_sent_at >= 8:
-            ai_preds_resp = requests.get(
-                heconstants.SYNC_SERVER + f"/history?conversation_id={conversation_id}&only_transcribe=True"
-            )
-            if ai_preds_resp.status_code == 200:
-                latest_ai_preds_resp = json.loads(ai_preds_resp.text)
-            last_trans_sent_at = time.time()
-        print(f"AI Preds: {latest_ai_preds_resp}")
+        last_preds_sent_at = time.time()
+        last_trans_sent_at = time.time()
+        responses = stub.StreamTranscription(generate_audio_chunks())
+        for response in responses:
+            print("Quick CC:", response.cc)
+            conversation_id = response.conversation_id
+            latest_ai_preds_resp = None
+            if time.time() - last_preds_sent_at >= 10:
+                ai_preds_resp = requests.get(
+                    heconstants.SYNC_SERVER + f"/history?conversation_id={conversation_id}"
+                )
+                if ai_preds_resp.status_code == 200:
+                    latest_ai_preds_resp = json.loads(ai_preds_resp.text)
+                last_preds_sent_at = time.time()
+
+            elif time.time() - last_trans_sent_at >= 8:
+                ai_preds_resp = requests.get(
+                    heconstants.SYNC_SERVER + f"/history?conversation_id={conversation_id}&only_transcribe=True"
+                )
+                if ai_preds_resp.status_code == 200:
+                    latest_ai_preds_resp = json.loads(ai_preds_resp.text)
+                last_trans_sent_at = time.time()
+            print(f"AI Preds: {latest_ai_preds_resp}")
+    except grpc.RpcError as e:
+        print("RPC error: {}".format(e.details()))
 
 
 if __name__ == "__main__":

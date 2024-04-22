@@ -326,6 +326,7 @@ class fileDownloader:
             api_type = message.get("api_type")
             api_path = message.get("api_path")
             language = message.get("language", "en")
+            output_language = message.get("output_language", "en")
 
             if "youtube.com" in file_path or "youtu.be" in file_path:
                 local_filename = f"tmp/{request_id}"  # YouTube videos are downloaded as mp4
@@ -393,6 +394,7 @@ class fileDownloader:
                 "provider_id": None,
                 "review_provider_id": None,
                 "language": language,
+                "output_language": output_language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -420,6 +422,7 @@ class fileDownloader:
                 "provider_id": None,
                 "review_provider_id": None,
                 "language": language,
+                "output_language": output_language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(datetime.utcnow()),

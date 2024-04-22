@@ -243,6 +243,7 @@ class aiPreds:
             api_type = message.get("api_type")
             api_path = message.get("api_path")
             language = message.get("language", "en")
+            output_language = message.get("output_language", "en")
             triage_ai_preds = None
             triage_ai_suggestion = None
             text = None
@@ -505,6 +506,7 @@ class aiPreds:
                         "provider_id": None,
                         "review_provider_id": None,
                         "language": language,
+                        "output_language": output_language,
                         "completed": False,
                         "exec_duration": 0.0,
                         "start_time": str(start_time),
@@ -535,6 +537,7 @@ class aiPreds:
                 "provider_id": None,
                 "review_provider_id": None,
                 "language": language,
+                "output_language": output_language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -758,7 +761,7 @@ class aiPreds:
                         messages=messages,
                     )
                     translated_text = response.choices[0]["message"]["content"]
-                    logger.info(f"translated_text :: {translated_text}")
+                    # logger.info(f"translated_text :: {translated_text}")
                     # extracted_info = json.loads(
                     #     response.choices[0]["message"]["function_call"]["arguments"]
                     # )
@@ -783,6 +786,7 @@ class aiPreds:
             retry_count = message.get("retry_count")
             failed_state = message.get("failed_state")
             language = message.get("language", "en")
+            output_language = message.get("output_language", "en")
 
             data = {
                 "es_id": f"{request_id}_FINAL_EXECUTOR",
@@ -803,6 +807,7 @@ class aiPreds:
                 "provider_id": None,
                 "review_provider_id": None,
                 "language": language,
+                "output_language": output_language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(datetime.utcnow()),
