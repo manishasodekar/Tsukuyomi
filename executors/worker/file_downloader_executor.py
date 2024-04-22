@@ -175,6 +175,7 @@ class fileDownloader:
             user_type = message.get("user_type")
             file_path = message.get("file_path")
             retry_count = message.get("retry_count")
+            language = message.get("language", "en")
             logger.info("Received rtmp stream")
             push_logs(care_request_id=stream_key,
                       given_msg="Livestream started (RTMP)",
@@ -246,6 +247,7 @@ class fileDownloader:
                         "encounter_id": None,
                         "provider_id": None,
                         "review_provider_id": None,
+                        "language": language,
                         "completed": False,
                         "exec_duration": 0.0,
                         "start_time": str(chunk_start_datetime),
@@ -289,6 +291,7 @@ class fileDownloader:
                     "encounter_id": None,
                     "provider_id": None,
                     "review_provider_id": None,
+                    "language": language,
                     "completed": False,
                     "exec_duration": 0.0,
                     "start_time": str(start_time),
@@ -322,6 +325,7 @@ class fileDownloader:
             webhook_url = message.get("webhook_url")
             api_type = message.get("api_type")
             api_path = message.get("api_path")
+            language = message.get("language", "en")
 
             if "youtube.com" in file_path or "youtu.be" in file_path:
                 local_filename = f"tmp/{request_id}"  # YouTube videos are downloaded as mp4
@@ -388,6 +392,7 @@ class fileDownloader:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -397,37 +402,40 @@ class fileDownloader:
 
         except Exception as e:
             logger.error(f"An unexpected error occurred  {e}")
+            data = {
+                "es_id": f"{request_id}_FILE_DOWNLOADER",
+                "file_path": file_path,
+                "webhook_url": webhook_url,
+                "api_path": api_path,
+                "api_type": api_type,
+                "req_type": "platform",
+                "user_type": "Provider",
+                "executor_name": "FILE_DOWNLOADER",
+                "state": "Init",
+                "retry_count": retry_count,
+                "uid": None,
+                "request_id": request_id,
+                "care_req_id": request_id,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "language": language,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(datetime.utcnow()),
+                "end_time": str(datetime.utcnow()),
+            }
             if retry_count <= 2:
                 retry_count += 1
-                data = {
-                    "es_id": f"{request_id}_FILE_DOWNLOADER",
-                    "file_path": file_path,
-                    "webhook_url": webhook_url,
-                    "api_path": api_path,
-                    "api_type": api_type,
-                    "req_type": "platform",
-                    "user_type": "Provider",
-                    "executor_name": "FILE_DOWNLOADER",
-                    "state": "Init",
-                    "retry_count": retry_count,
-                    "uid": None,
-                    "request_id": request_id,
-                    "care_req_id": request_id,
-                    "encounter_id": None,
-                    "provider_id": None,
-                    "review_provider_id": None,
-                    "completed": False,
-                    "exec_duration": 0.0,
-                    "start_time": str(datetime.utcnow()),
-                    "end_time": str(datetime.utcnow()),
-                }
-
+                data["retry_count"] = retry_count
                 producer.publish_executor_message(data)
             else:
                 response_json = {"request_id": request_id,
                                  "status": "Failed"}
                 merged_json_key = f"{request_id}/All_Preds.json"
                 s3.upload_to_s3(merged_json_key, response_json, is_json=True)
+                data["failed_state"] = "Init"
+                self.create_delivery_task(data)
 # if __name__ == "__main__":
 #     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 #     fileDownloader().save_rtmp_loop("123456", "patient")

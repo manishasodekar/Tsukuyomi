@@ -55,6 +55,8 @@ class ASRExecutor:
             retry_count = message.get("retry_count", 0)
             force_summary = message.get("force_summary", False)
             api_key = message.get("api_key")
+            language = message.get("language", "en")
+
             received_at = time.time()
             # previous_conversation_ids_datas = []
             previous_conversation_ids_datas = s3.get_files_matching_pattern(
@@ -130,9 +132,11 @@ class ASRExecutor:
             duration_in_milliseconds = len(audio)
             duration = duration_in_milliseconds / 1000.0
             audio_stream.name = file_path.split("/")[1]
+            filename = file_path.split("/")[1]
+            unique_id = filename.split(".")[0] + "___" + language
             audio_stream.seek(0)
             transcription_result = requests.post(
-                heconstants.AI_SERVER + "/transcribe/infer",
+                heconstants.AI_SERVER + f"/transcribe/infer?unique_id={unique_id}",
                 files={"f1": audio_stream},
             ).json()["prediction"][0]
             # todo change fixed ip to DNS
@@ -142,13 +146,18 @@ class ASRExecutor:
             # ).json()["prediction"][0]
 
         except Exception as ex:
-            print(ex)
+            logger.error(f"Something wrong with whisper API :: {ex}")
+            msg = "Something wrong with whisper API :: {ex}"
+            trace = traceback.format_exc()
+            logger.error(msg, trace)
             # esquery
             data = {
                 "received_at": received_at,
+                "chunk_no": chunk_no,
                 "conversation_id": conversation_id,
                 "user_name": user_name,
                 "duration": duration,
+                "language": language,
                 "success": False,
                 "audio_path": file_path,
             }
@@ -196,6 +205,7 @@ class ASRExecutor:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -236,6 +246,7 @@ class ASRExecutor:
                     "encounter_id": None,
                     "provider_id": None,
                     "review_provider_id": None,
+                    "language": language,
                     "completed": False,
                     "exec_duration": 0.0,
                     "start_time": str(start_time),
@@ -253,6 +264,7 @@ class ASRExecutor:
             api_key = message.get("api_key")
             api_type = message.get("api_type")
             api_path = message.get("api_path")
+            language = message.get("language", "en")
 
             received_at = time.time()
 
@@ -271,9 +283,11 @@ class ASRExecutor:
                 duration_in_milliseconds = len(audio)
                 duration = duration_in_milliseconds / 1000.0
                 audio_stream.name = file_path.split("/")[1]
+                filename = file_path.split("/")[1]
+                unique_id = filename.split(".")[0] + "___" + language
                 audio_stream.seek(0)
                 transcription_result = requests.post(
-                    heconstants.AI_SERVER + "/transcribe/infer",
+                    heconstants.AI_SERVER + f"/transcribe/infer?unique_id={unique_id}",
                     files={"f1": audio_stream},
                 ).json()["prediction"][0]
 
@@ -322,6 +336,7 @@ class ASRExecutor:
                     "encounter_id": None,
                     "provider_id": None,
                     "review_provider_id": None,
+                    "language": language,
                     "completed": False,
                     "exec_duration": 0.0,
                     "start_time": str(start_time),
@@ -344,36 +359,39 @@ class ASRExecutor:
                     "retry_count": 0
                     }
             s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
-
+            data = {
+                "es_id": f"{request_id}_ASR_EXECUTOR",
+                "file_path": file_path,
+                "webhook_url": webhook_url,
+                "api_path": api_path,
+                "api_type": api_type,
+                "req_type": "platform",
+                "executor_name": "ASR_EXECUTOR",
+                "state": "SpeechToText",
+                "retry_count": retry_count,
+                "uid": None,
+                "request_id": request_id,
+                "care_req_id": request_id,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "language": language,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(start_time),
+                "end_time": str(datetime.utcnow()),
+            }
             if retry_count <= 2:
                 retry_count += 1
-                data = {
-                    "es_id": f"{request_id}_ASR_EXECUTOR",
-                    "file_path": file_path,
-                    "webhook_url": webhook_url,
-                    "api_path": api_path,
-                    "api_type": api_type,
-                    "req_type": "platform",
-                    "executor_name": "ASR_EXECUTOR",
-                    "state": "SpeechToText",
-                    "retry_count": retry_count,
-                    "uid": None,
-                    "request_id": request_id,
-                    "care_req_id": request_id,
-                    "encounter_id": None,
-                    "provider_id": None,
-                    "review_provider_id": None,
-                    "completed": False,
-                    "exec_duration": 0.0,
-                    "start_time": str(start_time),
-                    "end_time": str(datetime.utcnow()),
-                }
+                data["retry_count"] = retry_count
                 producer.publish_executor_message(data)
             else:
                 response_json = {"request_id": request_id,
                                  "status": "Failed"}
                 merged_json_key = f"{request_id}/All_Preds.json"
                 s3.upload_to_s3(merged_json_key, response_json, is_json=True)
+                data["failed_state"] = "SpeechToText"
+                self.create_delivery_task(data)
 
             logger.error(f"An unexpected error occurred speechtotext {request_id} :: {ex}")
 
@@ -386,6 +404,7 @@ class ASRExecutor:
             req_type = message.get("req_type")
             api_type = message.get("api_type")
             api_path = message.get("api_path")
+            language = message.get("language", "en")
 
             data = {
                 "es_id": f"{request_id}_FINAL_EXECUTOR",
@@ -404,6 +423,7 @@ class ASRExecutor:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(datetime.utcnow()),

@@ -6,11 +6,14 @@ from typing import Optional
 import nltk
 
 import openai
+import requests
+
 from utils import heconstants
 from utils.s3_operation import S3SERVICE
 from services.kafka.kafka_service import KafkaService
 from config.logconfig import get_logger
 
+# The default language is 'english'
 nltk.download('punkt')
 s3 = S3SERVICE()
 producer = KafkaService(group_id="soap")
@@ -109,23 +112,55 @@ class soap:
                 result["clinicalAssessmentSummary"] = content
             elif title == "plan":
                 result["carePlanSummary"] = content
+            elif title == "chief complaints":
+                result["chiefComplaints"] = content
+            elif title == "present illness":
+                result["presentIllness"] = content
+            elif title == "past medical history":
+                result["pastMedicalHistory"] = content
+            elif title == "review of systems":
+                result["reviewOfSystems"] = content
 
         return result
 
-    def get_clinical_summaries_from_openai(self, text, summary_type: Optional[str] = None):
+    def get_clinical_summaries_from_openai(self, transcript_text, triage_ai_preds, summary_type: Optional[str] = None):
         try:
-            messages = [
-                {
-                    "role": "system",
-                    # "content": """Generate clinical summaries following their description for the following transcript""",
-                    "content": """"Summarize the medical case in the following format: SUBJECTIVE,
-                    OBJECTIVE, ASSESSMENT, PLAN. It is important to maintain accuracy and relevance to the medical
-                    context and omit any non-medical chatter, assumptions, or speculations. Provide the asked
-                    information in a clear and concise manner, structured, you are not suppose to assume anything and
-                    dont use any hypothesis , rememeber to generate results in points.""",
-                },
-                {"role": "user", "content": f"TEXT: {text}"},
-            ]
+            if triage_ai_preds:
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """Summarize the medical case from given PATIENT PROVIDER CONVERSATION and AI 
+                        TRIAGE CONVERSATION in the following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN, 
+                        CHIEF COMPLAINTS, PRESENT ILLNESS, PAST MEDICAL HISTORY, REVIEW OF SYSTEMS. It is important 
+                        to maintain accuracy and relevance to the medical context and omit any non-medical chatter, 
+                        assumptions, or speculations. Provide the asked information in a clear and concise manner, 
+                        structured, and remember to generate results in points. Make sure any information is only 
+                        present in one section (basically no duplicate information should be there). You are not 
+                        supposed to assume anything and don't use any hypothesis. This ensures clarity and precision 
+                        in the medical summary, focusing solely on the facts presented.""",
+                    },
+                    {"role": "user",
+                     "content": f"""AI TRIAGE CONVERSATION:\n {str(triage_ai_preds)} \n\nPATIENT PROVIDER """
+                                f"""CONVERSATION:\n {str(transcript_text)}"""},
+                    # {"role": "user", "content": f"TEXT: {text}"},
+                ]
+            else:
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """Summarize the medical case from given PATIENT PROVIDER CONVERSATION in the 
+                        following format: SUBJECTIVE, OBJECTIVE, ASSESSMENT, PLAN, CHIEF COMPLAINTS, PRESENT ILLNESS, 
+                        PAST MEDICAL HISTORY, REVIEW OF SYSTEMS. It is important to maintain accuracy and relevance 
+                        to the medical context and omit any non-medical chatter, assumptions, or speculations. 
+                        Provide the asked information in a clear and concise manner, structured, and remember to 
+                        generate results in points. Make sure any information is only present in one section (
+                        basically no duplicate information should be there). You are not supposed to assume anything 
+                        and don't use any hypothesis. This ensures clarity and precision in the medical summary, 
+                        focusing solely on the facts presented.""",
+                    },
+                    {"role": "user", "content": f"""PATIENT PROVIDER CONVERSATION: {str(transcript_text)}"""},
+                    # {"role": "user", "content": f"TEXT: {text}"},
+                ]
 
             # summary_function = self.filter_summary_properties(summary_type=summary_type)
 
@@ -156,12 +191,51 @@ class soap:
             msg = "Failed to get OPEN AI SUMMARIES :: {}".format(exc)
             self.logger.error(msg)
 
+    def translate_transcript_open_ai(self,
+                                     transcript_text,
+                                     language,
+                                     min_length=30,
+                                     ):
+        try:
+            transcript_text = transcript_text.strip()
+            if not transcript_text or len(transcript_text) <= min_length:
+                raise Exception("Transcript text is too short")
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": f"""Please translate the following conversation from {language} to English.""",
+                },
+                {"role": "user", "content": f"{transcript_text}"},
+            ]
+
+            for model_name in ["gpt-3.5-turbo-0613", "gpt-3.5-turbo-16k-0613", "gpt-4-0613"]:
+                try:
+                    response = openai.ChatCompletion.create(
+                        model=model_name,
+                        messages=messages,
+                    )
+                    translated_text = response.choices[0]["message"]["content"]
+                    logger.info(f"translated_text :: {translated_text}")
+                    # extracted_info = json.loads(
+                    #     response.choices[0]["message"]["function_call"]["arguments"]
+                    # )
+                    return translated_text
+
+                except Exception as ex:
+                    logger.error(ex)
+                    pass
+        except Exception as exc:
+            msg = "Failed to get translate conversation from OPEN AI :: {}".format(exc)
+            logger.error(msg)
+
     def get_merge_ai_preds(self, conversation_id, message):
         try:
             req_type = message.get("req_type")
             api_type = message.get("api_type")
             file_path = message.get("file_path")
             merged_segments = []
+            language_counts = {}
             merged_ai_preds = {
                 "age": {"text": None, "value": None, "unit": None},
                 "gender": {"text": None, "value": None, "unit": None},
@@ -189,10 +263,16 @@ class soap:
                     "objectiveClinicalSummary": [],
                     "clinicalAssessment": [],
                     "carePlanSuggested": [],
+                    "chiefComplaints": [],
+                    "presentIllness": [],
+                    "pastMedicalHistory": [],
+                    "reviewOfSystems": []
                 },
             }
 
             conversation_datas = None
+            dominant_language = None
+
             if req_type == "encounter":
                 conversation_datas = s3.get_files_matching_pattern(
                     pattern=f"{conversation_id}/{conversation_id}_*json")
@@ -204,12 +284,28 @@ class soap:
             if conversation_datas:
                 for conversation_data in conversation_datas:
                     merged_segments += conversation_data["segments"]
+                    # Count the occurrence of each language
+                    language = conversation_data["language"]
+                    if language in language_counts:
+                        language_counts[language] += 1
+                    else:
+                        language_counts[language] = 1
+
+                # Calculate total number of conversations to find 80% threshold
+                total_conversations = len(conversation_datas)
+                threshold_80_percent = total_conversations * 0.8
+
+                # Check if any language other than "en" meets the 80% threshold
+                for language, count in language_counts.items():
+                    if language != "en" and count >= threshold_80_percent:
+                        dominant_language = language
+                        break
 
             ai_preds_file_path = f"{conversation_id}/ai_preds.json"
             if s3.check_file_exists(ai_preds_file_path):
                 merged_ai_preds = s3.get_json_file(s3_filename=ai_preds_file_path)
 
-            return merged_segments, merged_ai_preds
+            return merged_segments, merged_ai_preds, dominant_language
 
         except Exception as e:
             self.logger.error(f"An unexpected error occurred while merging ai preds  {e}")
@@ -255,6 +351,352 @@ class soap:
             return interest_texts
         except Exception as e:
             self.logger.error(f"An unexpected error occurred  {e}")
+
+    def get_summary(self, message, start_time):
+        try:
+            conversation_id = message.get("care_req_id")
+            api_type = message.get("api_type")
+            file_path = message.get("file_path")
+            req_type = message.get("req_type")
+            chunk_no = message.get("chunk_no")
+            retry_count = message.get("retry_count", 0)
+            webhook_url = message.get("webhook_url")
+            api_type = message.get("api_type")
+            api_path = message.get("api_path")
+            language = message.get("language", "en")
+
+            triage_ai_preds = None
+
+            segments, last_ai_preds, dominant_language = self.get_merge_ai_preds(conversation_id=conversation_id,
+                                                                                 message=message)
+
+            subjective_summary = []
+            for k in [
+                "age",
+                "gender",
+                "height",
+                "weight",
+                "bmi",
+                "ethnicity",
+                "substanceAbuse",
+                "physicalActivityExercise",
+                "allergies",
+            ]:
+                if k in last_ai_preds:
+                    if k == "substanceAbuse":
+                        if "no" in last_ai_preds[k]['text']:
+                            subjective_summary.append("The patient reported no history of substance abuse.")
+                        elif "yes" in last_ai_preds[k]['text']:
+                            subjective_summary.append("The patient disclosed a history of substance abuse.")
+                        else:
+                            subjective_summary.append(f"{k.capitalize()}: {last_ai_preds[k]['text']}")
+                    else:
+                        subjective_summary.append(f"{k.capitalize()}: {last_ai_preds[k]['text']}")
+
+            objective_summary = []
+            for k in ["bloodPressure", "pulse", "respiratoryRate", "bodyTemperature"]:
+                if k in last_ai_preds:
+                    objective_summary.append(f"{k.capitalize()}: {last_ai_preds[k]['text']}")
+
+            clinical_assessment_summary = []
+            care_plan_summary = []
+            chief_complaints_summary = []
+            present_illness_summary = []
+            past_medical_history_summary = []
+            review_of_systems_summary = []
+
+            if api_type == "soap":
+                input_text = s3.get_json_file(s3_filename=file_path)
+                interest_texts = input_text.get("transcript")
+                dominant_language = input_text.get("language")
+                # interest_texts = self.get_interested_text(last_ai_preds, transcript=transcript)
+            else:
+                # interest_texts = self.get_interested_text(last_ai_preds, segments=segments)
+                interest_texts = " ".join([_["text"] for _ in segments])
+
+            if dominant_language and dominant_language != "en":
+                interest_texts = self.translate_transcript_open_ai(interest_texts, dominant_language)
+                # if interest_texts:
+                #     payload = {
+                #         "data": [interest_texts]
+                #     }
+                #     punc_transcript = requests.post(
+                #         heconstants.AI_SERVER + f"/punctuation/infer",
+                #         json=payload).json()['prediction'][0]
+                #     if punc_transcript:
+                #         interest_texts = punc_transcript
+                transcript_data = {"transcript": interest_texts, "language": "en"}
+                s3.upload_to_s3(f"{conversation_id}/translated_transcript.json", transcript_data, is_json=True)
+
+            # if interest_texts and len(" ".join(interest_texts).split()) >= 20:
+            if interest_texts and len(interest_texts.split()) >= 20:
+                triage_ai_preds_key = f"{conversation_id}/triage_ai_preds.json"
+                if s3.check_file_exists(triage_ai_preds_key):
+                    preds = s3.get_json_file(triage_ai_preds_key)
+                    triage_ai_preds = preds.get("ai_preds")
+
+                # summaries = self.get_clinical_summaries_from_openai("\n".join(interest_texts), triage_ai_preds)
+                summaries = self.get_clinical_summaries_from_openai(interest_texts, triage_ai_preds)
+
+                # subjective_summary
+                try:
+                    subjective_summary += nltk.sent_tokenize(summaries["subjectiveSummary"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (subjectiveSummary) ::  {e}")
+                    pass
+
+                subjective_summary = [
+                    line
+                    for line in subjective_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if subjective_summary:
+                    try:
+                        payload = {
+                            "data": subjective_summary
+                        }
+                        subjective_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # objective_summary
+                try:
+                    objective_summary += nltk.sent_tokenize(summaries["objectiveSummary"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (objectiveSummary) ::  {e}")
+                    pass
+
+                objective_summary = [
+                    line
+                    for line in objective_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if objective_summary:
+                    try:
+                        payload = {
+                            "data": objective_summary
+                        }
+                        objective_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # clinical_assessment_summary
+                try:
+                    clinical_assessment_summary += nltk.sent_tokenize(
+                        summaries["clinicalAssessmentSummary"]
+                    )
+                except Exception as e:
+                    self.logger.error(f"NLTK error (clinicalAssessmentSummary) ::  {e}")
+                    pass
+
+                clinical_assessment_summary = [
+                    line
+                    for line in clinical_assessment_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if clinical_assessment_summary:
+                    try:
+                        payload = {
+                            "data": clinical_assessment_summary
+                        }
+                        clinical_assessment_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # care_plan_summary
+                try:
+                    care_plan_summary += nltk.sent_tokenize(summaries["carePlanSummary"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (carePlanSummary) ::  {e}")
+                    pass
+
+                care_plan_summary = [
+                    line
+                    for line in care_plan_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if care_plan_summary:
+                    try:
+                        payload = {
+                            "data": care_plan_summary
+                        }
+                        care_plan_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # chief_complaints_summary
+                try:
+                    chief_complaints_summary += nltk.sent_tokenize(summaries["chiefComplaints"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (chiefComplaints) ::  {e}")
+                    pass
+
+                chief_complaints_summary = [
+                    line
+                    for line in chief_complaints_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if chief_complaints_summary:
+                    try:
+                        payload = {
+                            "data": chief_complaints_summary
+                        }
+                        chief_complaints_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # present_illness_summary
+                try:
+                    present_illness_summary += nltk.sent_tokenize(summaries["presentIllness"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (chiefComplaints) ::  {e}")
+                    pass
+
+                present_illness_summary = [
+                    line
+                    for line in present_illness_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if present_illness_summary:
+                    try:
+                        payload = {
+                            "data": present_illness_summary
+                        }
+                        present_illness_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # past_medical_history_summary
+                try:
+                    past_medical_history_summary += nltk.sent_tokenize(summaries["pastMedicalHistory"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (chiefComplaints) ::  {e}")
+                    pass
+
+                past_medical_history_summary = [
+                    line
+                    for line in past_medical_history_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if past_medical_history_summary:
+                    try:
+                        payload = {
+                            "data": past_medical_history_summary
+                        }
+                        past_medical_history_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                # review_of_systems_summary
+                try:
+                    review_of_systems_summary += nltk.sent_tokenize(summaries["reviewOfSystems"])
+                except Exception as e:
+                    self.logger.error(f"NLTK error (chiefComplaints) ::  {e}")
+                    pass
+
+                review_of_systems_summary = [
+                    line
+                    for line in review_of_systems_summary
+                    if not any([word in line.lower() for word in remove_lines_with_words])
+                ]
+
+                if review_of_systems_summary:
+                    try:
+                        payload = {
+                            "data": review_of_systems_summary
+                        }
+                        review_of_systems_summary = requests.post(
+                            heconstants.AI_SERVER + f"/punctuation/infer",
+                            json=payload).json()["prediction"]
+                    except:
+                        pass
+
+                data = {
+                    "subjectiveClinicalSummary": subjective_summary,
+                    "objectiveClinicalSummary": objective_summary,
+                    "clinicalAssessment": clinical_assessment_summary,
+                    "carePlanSuggested": care_plan_summary,
+                    "chiefComplaints": chief_complaints_summary,
+                    "presentIllness": present_illness_summary,
+                    "pastMedicalHistory": past_medical_history_summary,
+                    "reviewOfSystems": review_of_systems_summary
+                }
+
+                s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
+                self.create_delivery_task(message=message)
+
+            else:
+                data = {
+                    "subjectiveClinicalSummary": subjective_summary,
+                    "objectiveClinicalSummary": objective_summary,
+                    "clinicalAssessment": clinical_assessment_summary,
+                    "carePlanSuggested": care_plan_summary,
+                    "chiefComplaints": chief_complaints_summary,
+                    "presentIllness": present_illness_summary,
+                    "pastMedicalHistory": past_medical_history_summary,
+                    "reviewOfSystems": review_of_systems_summary
+
+                }
+                s3.upload_to_s3(f"{conversation_id}/soap.json", data, is_json=True)
+                self.create_delivery_task(message=message)
+
+        except Exception as e:
+            self.logger.error(f"An unexpected error occurred while generating SOAP summary ::  {e}")
+            data = {
+                "es_id": f"{conversation_id}_SOAP",
+                "chunk_no": chunk_no,
+                "file_path": file_path,
+                "webhook_url": webhook_url,
+                "api_path": api_path,
+                "api_type": api_type,
+                "req_type": req_type,
+                "executor_name": "SOAP_EXECUTOR",
+                "state": "Analytics",
+                "retry_count": retry_count,
+                "uid": None,
+                "request_id": conversation_id,
+                "care_req_id": conversation_id,
+                "encounter_id": None,
+                "provider_id": None,
+                "review_provider_id": None,
+                "language": language,
+                "completed": False,
+                "exec_duration": 0.0,
+                "start_time": str(start_time),
+                "end_time": str(datetime.utcnow()),
+            }
+            if retry_count <= 2:
+                retry_count += 1
+                data["retry_count"] = retry_count
+                producer.publish_executor_message(data)
+            else:
+                response_json = {"request_id": conversation_id,
+                                 "status": "Failed"}
+                merged_json_key = f"{conversation_id}/All_Preds.json"
+                s3.upload_to_s3(merged_json_key, response_json, is_json=True)
+                data["failed_state"] = "Analytics"
+                self.create_delivery_task(data)
 
     def get_subjective_summary(self, message, start_time, segments: list = [], last_ai_preds: dict = {}):
         try:
@@ -482,6 +924,7 @@ class soap:
             retry_count = message.get("retry_count")
             api_type = message.get("api_type")
             api_path = message.get("api_path")
+            language = message.get("language", "en")
 
             data = {
                 "es_id": f"{request_id}_FINAL_EXECUTOR",
@@ -500,6 +943,7 @@ class soap:
                 "encounter_id": None,
                 "provider_id": None,
                 "review_provider_id": None,
+                "language": language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(datetime.utcnow()),

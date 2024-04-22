@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import os
+import re
 import subprocess
 import traceback
 from datetime import datetime
@@ -47,6 +48,7 @@ class finalExecutor:
             api_type = message.get("api_type")
             file_path = message.get("file_path")
             failed_state = message.get("failed_state")
+            language = message.get("language")
 
             logger.info("MERGING All AIPREDS")
 
@@ -78,6 +80,10 @@ class finalExecutor:
                     "objectiveClinicalSummary": [],
                     "clinicalAssessment": [],
                     "carePlanSuggested": [],
+                    "chiefComplaints": [],
+                    "presentIllness": [],
+                    "pastMedicalHistory": [],
+                    "reviewOfSystems": []
                 },
             }
             response_json = {"request_id": request_id}
@@ -108,24 +114,58 @@ class finalExecutor:
 
                     if s3.check_file_exists(ai_preds_file_path):
                         merged_ai_preds = s3.get_json_file(ai_preds_file_path)
-                        for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary",
-                                             "clinicalAssessment",
-                                             "carePlanSuggested"]:
-                            summary_file = f"{request_id}/{summary_type}.json"
-                            if s3.check_file_exists(summary_file):
-                                summary_content = s3.get_json_file(s3_filename=summary_file)
-                                if summary_content:
-                                    merged_ai_preds["summaries"][summary_type] = summary_content
+                        summary_file = f"{request_id}/soap.json"
+                        if s3.check_file_exists(summary_file):
+                            summary_content = s3.get_json_file(s3_filename=summary_file)
+                            if summary_content:
+                                summary = {
+                                    "summaries": {}
+                                }
+                                for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary",
+                                                     "clinicalAssessment", "carePlanSuggested", "chiefComplaints",
+                                                     "presentIllness", "pastMedicalHistory", "reviewOfSystems"]:
+                                    summary["summaries"][summary_type] = summary_content.get(summary_type)
+                                merged_ai_preds.update(summary)
 
                         if api_type in {"clinical_notes", "ai_pred"}:
                             response_json["ai_preds"] = merged_ai_preds
                         elif api_type == "soap":
                             response_json["summaries"] = merged_ai_preds.get("summaries")
 
+                    pattern = re.compile(
+                        r'(?:\b(?:thanks|thank you|you|bye|yeah|beep|okay|peace)\b[.!?,-]*\s*){2,}',
+                        re.IGNORECASE)
+                    word_pattern = re.compile(r'\b(?:Thank you|Bye|You)\.')
+
                     if merged_segments:
-                        response_json["transcript"] = " ".join([_["text"] for _ in merged_segments])
+                        long_transcript = " ".join([_["text"] for _ in merged_segments])
+                        long_transcript = pattern.sub('', long_transcript)
+                        long_transcript = word_pattern.sub('', long_transcript)
+                        long_transcript = re.sub(' +', ' ', long_transcript).strip()
+                        response_json["transcript"] = long_transcript
                     elif text:
+                        text = pattern.sub('', text)
+                        text = word_pattern.sub('', text)
+                        text = re.sub(' +', ' ', text).strip()
                         response_json["transcript"] = text
+
+                    if language == "en":
+                        transcript = response_json.get("transcript")
+                        payload = {
+                            "data": [transcript]
+                        }
+                        # if transcript:
+                        #     punc_transcript = requests.post(
+                        #         heconstants.AI_SERVER + f"/punctuation/infer",
+                        #         json=payload).json()["prediction"][0]
+                        #     if punc_transcript:
+                        #         response_json["transcript"] = punc_transcript
+
+                    if s3.check_file_exists(key=f"{request_id}/translated_transcript.json"):
+                        translated_transcript_content = s3.get_json_file(
+                            s3_filename=f"{request_id}/translated_transcript.json")
+                        if translated_transcript_content:
+                            response_json["translated_transcript"] = translated_transcript_content.get("transcript")
 
                     response_json["success"] = True
 
@@ -136,21 +176,23 @@ class finalExecutor:
 
                     merged_json_key = f"{request_id}/All_Preds.json"
                     s3.upload_to_s3(merged_json_key, response_json, is_json=True)
+                    logger.info(f'MERGED AI PREDS')
+                    if webhook_url:
+                        logger.info(f'SENDING WEBHOOKS')
+                        if len(response_json["transcript"]) > 0 and not failed_state:
+                            status_code, response_text = self.send_webhook(webhook_url, response_json)
+                            logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
+                        else:
+                            error_resp = {"success": False,
+                                          "request_id": request_id,
+                                          "issue": [{
+                                              "error-code": "HE-101",
+                                              "message": "Failed to process the request."
+                                          }]
+                                          }
 
-                    if len(response_json["transcript"]) > 0 and not failed_state:
-                        status_code, response_text = self.send_webhook(webhook_url, response_json)
-                        logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
-                    else:
-                        error_resp = {"success": False,
-                                      "request_id": request_id,
-                                      "issue": [{
-                                          "error-code": "HE-101",
-                                          "message": "Failed to process the request."
-                                      }]
-                                      }
-
-                        status_code, response_text = self.send_webhook(webhook_url, error_resp)
-                        logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
+                            status_code, response_text = self.send_webhook(webhook_url, error_resp)
+                            logger.info(f'Status Code: {status_code}\nResponse: {response_text}')
 
         except Exception as exc:
             msg = "Failed to merge and send ai_preds :: {}".format(exc)

@@ -6,6 +6,7 @@ import uuid
 import falcon
 import traceback
 import logging
+import requests
 from utils.s3_operation import S3SERVICE
 from typing import Optional
 from utils import heconstants
@@ -50,20 +51,21 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
             "entities": {
                 "medications": [],
                 "symptoms": [],
-                "diseases": [],
                 "diagnoses": [],
-                "surgeries": [],
-                "tests": [],
+                "procedures": [],
             },
             "summaries": {
                 "subjectiveClinicalSummary": [],
                 "objectiveClinicalSummary": [],
                 "clinicalAssessment": [],
                 "carePlanSuggested": [],
+                "chiefComplaints": [],
+                "presentIllness": [],
+                "pastMedicalHistory": [],
+                "reviewOfSystems": []
             },
         }
         response_json = {}
-        ai_preds_file_path = f"{conversation_id}/ai_preds.json"
 
         conversation_datas = s3.get_files_matching_pattern(
             pattern=f"{conversation_id}/{conversation_id}_*json")
@@ -83,16 +85,21 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
                 response_json["segments"] = merged_segments
 
             if not only_transcribe:
+                ai_preds_file_path = f"{conversation_id}/ai_preds.json"
                 if s3.check_file_exists(ai_preds_file_path):
                     merged_ai_preds = s3.get_json_file(ai_preds_file_path)
-                    for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary", "clinicalAssessment",
-                                         "carePlanSuggested"]:
-                        summary_file = f"{conversation_id}/{summary_type}.json"
-                        if s3.check_file_exists(summary_file):
-                            summary_content = s3.get_json_file(s3_filename=summary_file)
-                            if summary_content:
-                                merged_ai_preds["summaries"][summary_type] = summary_content
-
+                    summary_file = f"{conversation_id}/soap.json"
+                    if s3.check_file_exists(summary_file):
+                        summary_content = s3.get_json_file(s3_filename=summary_file)
+                        if summary_content:
+                            summary = {
+                                "summaries": {}
+                            }
+                            for summary_type in ["subjectiveClinicalSummary", "objectiveClinicalSummary",
+                                                 "clinicalAssessment", "carePlanSuggested", "chiefComplaints",
+                                                 "presentIllness", "pastMedicalHistory", "reviewOfSystems"]:
+                                summary["summaries"][summary_type] = summary_content.get(summary_type)
+                            merged_ai_preds.update(summary)
                     response_json["ai_preds"] = merged_ai_preds
 
             response_json["meta"] = audio_metas
@@ -100,6 +107,24 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
 
             if merged_segments:
                 response_json["transcript"] = " ".join([_["text"] for _ in merged_segments])
+
+            transcript = response_json.get("transcript")
+            # if transcript:
+            #     payload = {
+            #         "data": [transcript]
+            #     }
+            #     punctuation_server = "http://127.0.0.1:2001"
+            #     punc_transcript = requests.post(
+            #         punctuation_server + f"/infer",
+            #         json=payload).json()['prediction'][0]
+            #     if punc_transcript:
+            #         response_json["transcript"] = punc_transcript
+
+            if s3.check_file_exists(key=f"{conversation_id}/translated_transcript.json"):
+                translated_transcript_content = s3.get_json_file(
+                    s3_filename=f"{conversation_id}/translated_transcript.json")
+                if translated_transcript_content:
+                    response_json["translated_transcript"] = translated_transcript_content.get("transcript")
 
             return response_json
 
@@ -112,7 +137,7 @@ def get_merge_ai_preds(conversation_id, only_transcribe: Optional[bool] = False)
         logger.error(msg, trace)
 
 
-def create_task(request_id, webhook_url, audio_url, api_type):
+def create_task(request_id, webhook_url, audio_url, language, api_type, clinical_ner_flag):
     es_id = f"{request_id}_FILE_DOWNLOADER"
     executor_name = "FILE_DOWNLOADER"
     state = "Init"
@@ -121,7 +146,7 @@ def create_task(request_id, webhook_url, audio_url, api_type):
         "es_id": es_id,
         "webhook_url": webhook_url,
         "file_path": audio_url,
-        "api_path": f"/{api_type}",
+        "api_path": f"/{api_type}" if not clinical_ner_flag else f"/{api_type}[clinical_ner]",
         "api_type": api_type,
         "req_type": "platform",
         "user_type": "Provider",
@@ -134,6 +159,7 @@ def create_task(request_id, webhook_url, audio_url, api_type):
         "encounter_id": None,
         "provider_id": None,
         "review_provider_id": None,
+        "language": language,
         "completed": False,
         "exec_duration": 0.0,
         "start_time": str(datetime.utcnow()),
@@ -150,7 +176,7 @@ def create_task(request_id, webhook_url, audio_url, api_type):
     }
 
 
-def create_aipred_task(request_id, webhook_url, text, api_type):
+def create_aipred_task(request_id, webhook_url, text, language, api_type, clinical_ner_flag):
     if api_type == "ai_pred":
         es_id = f"{request_id}_AI_PRED"
         executor_name = "AI_PRED"
@@ -160,13 +186,13 @@ def create_aipred_task(request_id, webhook_url, text, api_type):
         executor_name = "SOAP_EXECUTOR"
         state = "AiPred"
     file_key = f"{request_id}/{request_id}_input.json"
-    transcript = {"transcript": text}
+    transcript = {"transcript": text, "language": language}
     s3.upload_to_s3(s3_filename=file_key, data=transcript, is_json=True)
     data = {
         "es_id": es_id,
         "webhook_url": webhook_url,
         "file_path": file_key,
-        "api_path": f"/{api_type}",
+        "api_path": f"/{api_type}" if not clinical_ner_flag else f"/{api_type}[clinical_ner]",
         "api_type": api_type,
         "req_type": "platform",
         "user_type": "Provider",
@@ -179,6 +205,7 @@ def create_aipred_task(request_id, webhook_url, text, api_type):
         "encounter_id": None,
         "provider_id": None,
         "review_provider_id": None,
+        "language": language,
         "completed": False,
         "exec_duration": 0.0,
         "start_time": str(datetime.utcnow()),
@@ -199,67 +226,194 @@ class History(object):
     def on_get(self, req, resp):
         conversation_id = req.params.get("conversation_id")
         only_transcribe = req.params.get("only_transcribe")
-
-        if not conversation_id:
-            self.logger.error("Bad Request with missing conversation_id")
-            raise falcon.HTTPError(status=400, description="Bad Request with missing conversation_id parameter")
-        resp.media = get_merge_ai_preds(
-            conversation_id, only_transcribe
-        )
+        uid = req.params.get("uid")
+        if uid:
+            resp.media = s3.get_dirs_matching_pattern(pattern=f"copilot__{uid}*")
+        else:
+            if not conversation_id:
+                self.logger.error("Bad Request with missing conversation_id")
+                raise falcon.HTTPError(status=400, description="Bad Request with missing conversation_id parameter")
+            resp.media = get_merge_ai_preds(
+                conversation_id, only_transcribe
+            )
 
 
 class clinicalNotes(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
         audio_url = req.params.get("audio_url")
+        sync = req.params.get("sync", "false")
+        sync = sync.lower() == 'true'
+        clinical_ner = req.params.get("clinical_ner", "false")
+        clinical_ner = clinical_ner.lower() == 'true'
+        language = req.params.get("language", "en")
         if audio_url is None:
             self.logger.error("audio_url query parameter is missing.")
             raise falcon.HTTPError(status=400, description="Audio url is missing.")
+        if language is None:
+            self.logger.error("language param is missing.")
+            raise falcon.HTTPError(status=400, description="language param is missing.")
         request_id = generate_request_id()
         resp.set_header('Request_ID', request_id)
         resp.set_header('WEBHOOK_URL', webhook_url)
-        resp.media = create_task(request_id, webhook_url, audio_url, api_type="clinical_notes")
+        if not sync:
+            resp.media = create_task(request_id, webhook_url, audio_url, language, api_type="clinical_notes",
+                                     clinical_ner_flag=clinical_ner)
+        else:
+            create_task(request_id, webhook_url, audio_url, language, api_type="clinical_notes",
+                        clinical_ner_flag=clinical_ner)
+            while True:
+                file_path = f"{request_id}/All_Preds.json"
+                resp.set_header('Request-ID', request_id)
+                if s3.check_file_exists(file_path):
+                    merged_ai_preds = s3.get_json_file(file_path)
+                    if merged_ai_preds:
+                        status = merged_ai_preds.get("status")
+                        if status:
+                            if status == "Completed":
+                                success = merged_ai_preds.get("success")
+                                del merged_ai_preds['status']
+                                del merged_ai_preds['success']
+                                del merged_ai_preds['request_id']
+                                resp.media = {"request_id": request_id,
+                                              "status": status,
+                                              "results": merged_ai_preds,
+                                              "success": success}
+                                break
 
 
 class Transcription(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
-        audio_url = req.params.get("audio_url")
+        audio_url = req.params.get("audio_url", "False")
+        sync = req.params.get("sync", "false")
+        sync = sync.lower() == 'true'
+        clinical_ner = req.params.get("clinical_ner", "false")
+        clinical_ner = clinical_ner.lower() == 'true'
+        language = req.params.get("language", "en")
         if audio_url is None:
             self.logger.error("audio_url query parameter is missing.")
             raise falcon.HTTPError(status=400, description="Audio url is missing.")
+        if language is None:
+            self.logger.error("language param is missing.")
+            raise falcon.HTTPError(status=400, description="language param is missing.")
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_task(request_id, webhook_url, audio_url, api_type="transcription")
+        if not sync:
+            resp.media = create_task(request_id, webhook_url, audio_url, language, api_type="transcription",
+                                     clinical_ner_flag=clinical_ner)
+        else:
+            create_task(request_id, webhook_url, audio_url, language, api_type="transcription",
+                        clinical_ner_flag=clinical_ner)
+            while True:
+                file_path = f"{request_id}/All_Preds.json"
+                resp.set_header('Request-ID', request_id)
+                if s3.check_file_exists(file_path):
+                    merged_ai_preds = s3.get_json_file(file_path)
+                    if merged_ai_preds:
+                        status = merged_ai_preds.get("status")
+                        if status:
+                            if status == "Completed":
+                                success = merged_ai_preds.get("success")
+                                del merged_ai_preds['status']
+                                del merged_ai_preds['success']
+                                del merged_ai_preds['request_id']
+                                resp.media = {"request_id": request_id,
+                                              "status": status,
+                                              "results": merged_ai_preds,
+                                              "success": success}
+                                break
 
 
 class AiPred(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
+        clinical_ner = req.params.get("clinical_ner", "false")
+        sync = req.params.get("sync", "false")
+        sync = sync.lower() == 'true'
+        clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
+        language = data.get("language", "en")
         if text is None:
             self.logger.error("text input is missing.")
             raise falcon.HTTPError(status=400, description="text input is missing.")
+        if language is None:
+            self.logger.error("language input is missing.")
+            raise falcon.HTTPError(status=400, description="language input is missing.")
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_aipred_task(request_id, webhook_url, text, api_type="ai_pred")
+        if not sync:
+            resp.media = create_aipred_task(request_id, webhook_url, text, language=language, api_type="ai_pred",
+                                            clinical_ner_flag=clinical_ner)
+        else:
+            create_aipred_task(request_id, webhook_url, text, language=language, api_type="ai_pred",
+                               clinical_ner_flag=clinical_ner)
+            while True:
+                file_path = f"{request_id}/All_Preds.json"
+                resp.set_header('Request-ID', request_id)
+                if s3.check_file_exists(file_path):
+                    merged_ai_preds = s3.get_json_file(file_path)
+                    if merged_ai_preds:
+                        status = merged_ai_preds.get("status")
+                        if status:
+                            if status == "Completed":
+                                success = merged_ai_preds.get("success")
+                                del merged_ai_preds['status']
+                                del merged_ai_preds['success']
+                                del merged_ai_preds['request_id']
+                                resp.media = {"request_id": request_id,
+                                              "status": status,
+                                              "results": merged_ai_preds,
+                                              "success": success}
+                                break
 
 
 class Summary(object):
     def on_post(self, req, resp):
         webhook_url = req.params.get("webhook_url")
+        sync = req.params.get("sync", "false")
+        sync = sync.lower() == 'true'
+        clinical_ner = req.params.get("clinical_ner", "false")
+        clinical_ner = clinical_ner.lower() == 'true'
         data = req.media
         text = data.get("text")
+        language = data.get("language", "en")
         if text is None:
             self.logger.error("text input is missing.")
             raise falcon.HTTPError(status=400, description="text input is missing.")
+        if language is None:
+            self.logger.error("language input is missing.")
+            raise falcon.HTTPError(status=400, description="language input is missing.")
         request_id = generate_request_id()
         resp.set_header('Request-ID', request_id)
         resp.set_header('WEBHOOK-URL', webhook_url)
-        resp.media = create_aipred_task(request_id, webhook_url, text, api_type="soap")
+        if not sync:
+            resp.media = create_aipred_task(request_id, webhook_url, text, language=language, api_type="soap",
+                                            clinical_ner_flag=clinical_ner)
+        else:
+            create_aipred_task(request_id, webhook_url, text, language=language, api_type="soap",
+                               clinical_ner_flag=clinical_ner)
+            while True:
+                file_path = f"{request_id}/All_Preds.json"
+                resp.set_header('Request-ID', request_id)
+                if s3.check_file_exists(file_path):
+                    merged_ai_preds = s3.get_json_file(file_path)
+                    if merged_ai_preds:
+                        status = merged_ai_preds.get("status")
+                        if status:
+                            if status == "Completed":
+                                success = merged_ai_preds.get("success")
+                                del merged_ai_preds['status']
+                                del merged_ai_preds['success']
+                                del merged_ai_preds['request_id']
+                                resp.media = {"request_id": request_id,
+                                              "status": status,
+                                              "results": merged_ai_preds,
+                                              "success": success}
+                                break
 
 
 class Status(object):

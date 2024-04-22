@@ -27,7 +27,7 @@ class Executor:
                     if consumer.value.decode('utf-8') != '':
                         if consumer.topic == heconstants.EXECUTOR_TOPIC:
                             message_to_pass = consumer.value.decode('utf-8')
-                            # kafka_client.commit()
+                            kafka_client.commit()
                             start_time = datetime.utcnow()
                             message_dict = json.loads(message_to_pass)
                             if message_dict.get("state") == "Init":
