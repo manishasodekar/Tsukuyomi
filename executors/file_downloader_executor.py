@@ -40,6 +40,8 @@ class Executor:
                                     request_id = message_dict.get("request_id")
                                     filedownloader = fileDownloader()
                                     logger.info(f"Downloading Audio File :: {request_id}")
+                                    output_language = message_dict.get("output_language")
+                                    logger.info(f"Output language :: {output_language}")
                                     executor.submit(filedownloader.download_file, message_dict, start_time)
 
         except Exception as exc:

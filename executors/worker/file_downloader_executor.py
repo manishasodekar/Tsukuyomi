@@ -176,6 +176,7 @@ class fileDownloader:
             file_path = message.get("file_path")
             retry_count = message.get("retry_count")
             language = message.get("language", "en")
+            output_language = message.get("output_language", "en")
             logger.info("Received rtmp stream")
             push_logs(care_request_id=stream_key,
                       given_msg="Livestream started (RTMP)",
@@ -248,6 +249,7 @@ class fileDownloader:
                         "provider_id": None,
                         "review_provider_id": None,
                         "language": language,
+                        "output_language": output_language,
                         "completed": False,
                         "exec_duration": 0.0,
                         "start_time": str(chunk_start_datetime),
@@ -292,6 +294,7 @@ class fileDownloader:
                     "provider_id": None,
                     "review_provider_id": None,
                     "language": language,
+                    "output_language": output_language,
                     "completed": False,
                     "exec_duration": 0.0,
                     "start_time": str(start_time),

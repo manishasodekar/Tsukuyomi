@@ -56,6 +56,7 @@ class ASRExecutor:
             force_summary = message.get("force_summary", False)
             api_key = message.get("api_key")
             language = message.get("language", "en")
+            output_language = message.get("output_language", "en")
 
             received_at = time.time()
             # previous_conversation_ids_datas = []
@@ -158,6 +159,7 @@ class ASRExecutor:
                 "user_name": user_name,
                 "duration": duration,
                 "language": language,
+                "output_language": output_language,
                 "success": False,
                 "audio_path": file_path,
             }
@@ -186,6 +188,7 @@ class ASRExecutor:
                     "success": True,
                     "audio_path": file_path,
                     "language": language,
+                    "output_language": output_language,
                     "retry_count": 0
                     }
             s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
@@ -206,6 +209,7 @@ class ASRExecutor:
                 "provider_id": None,
                 "review_provider_id": None,
                 "language": language,
+                "output_language": output_language,
                 "completed": False,
                 "exec_duration": 0.0,
                 "start_time": str(start_time),
@@ -224,6 +228,7 @@ class ASRExecutor:
                     "success": False,
                     "audio_path": file_path,
                     "language": language,
+                    "output_language": output_language,
                     "retry_count": 0
                     }
             s3.upload_to_s3(file_path.replace("wav", "json"), data, is_json=True)
@@ -247,6 +252,7 @@ class ASRExecutor:
                     "provider_id": None,
                     "review_provider_id": None,
                     "language": language,
+                    "output_language": output_language,
                     "completed": False,
                     "exec_duration": 0.0,
                     "start_time": str(start_time),

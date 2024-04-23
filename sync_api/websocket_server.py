@@ -50,7 +50,7 @@ def push_logs(care_request_id: str, given_msg: str, he_type: str, req_type: str,
 
 
 # check if PID is running python
-def check_and_start_rtmp(connection_id, language="en"):
+def check_and_start_rtmp(connection_id, language="en", output_language="en"):
     key = f"{connection_id}/{connection_id}.json"
     IS_FILE_EXIST = s3.check_file_exists(key)
     if IS_FILE_EXIST:
@@ -78,6 +78,7 @@ def check_and_start_rtmp(connection_id, language="en"):
             "provider_id": None,
             "review_provider_id": None,
             "language": language,
+            "output_language": output_language,
             "completed": False,
             "exec_duration": 0.0,
             "start_time": str(datetime.utcnow()),
@@ -144,6 +145,7 @@ def websocket_handler(env, start_response):
             req_type = message.get("req_type")
             audio_type = message.get("audio_type")
             language = message.get("selected_language", "en").lower()
+            output_language = message.get("output_language", "en").lower()
             push_logs(care_request_id=connection_id,
                       given_msg="Websocket has started",
                       he_type=user_type,
@@ -187,7 +189,7 @@ def websocket_handler(env, start_response):
             if user_type in {"provider", "inclinic"}:
                 IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp(connection_id, language)
                 IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp_for_connection_id(
-                    connection_id, user_type, ws, language
+                    connection_id, user_type, ws, language, output_language
                 )
 
         if req_type and req_type == "healiom_copilot":
@@ -322,6 +324,7 @@ def websocket_handler(env, start_response):
                                 "provider_id": None,
                                 "review_provider_id": None,
                                 "language": language,
+                                "output_language": output_language,
                                 "completed": False,
                                 "exec_duration": 0.0,
                                 "start_time": str(datetime.utcnow()),
@@ -362,6 +365,7 @@ def websocket_handler(env, start_response):
                                     "provider_id": None,
                                     "review_provider_id": None,
                                     "language": language,
+                                    "output_language": output_language,
                                     "completed": False,
                                     "exec_duration": 0.0,
                                     "start_time": str(datetime.utcnow()),

@@ -42,6 +42,8 @@ class Executor:
                                 else:
                                     stream_key = message_dict.get("request_id")
                                     logger.info(f"Starting SOAP for platform:: {stream_key} :: {file_path}")
+                                    output_language = message_dict.get("output_language")
+                                    logger.info(f"Output language :: {output_language}")
 
                                 summary = soap()
                                 executor.submit(summary.get_summary, message_dict, start_time)

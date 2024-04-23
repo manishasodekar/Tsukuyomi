@@ -43,6 +43,8 @@ class Executor:
                                     request_id = message_dict.get("request_id")
                                     file_path = message_dict.get("file_path")
                                     logger.info(f"Starting ASR for platform  :: {request_id} :: {file_path}")
+                                    output_language = message_dict.get("output_language")
+                                    logger.info(f"Output language :: {output_language}")
                                     executor.submit(asrexecutor.speechToText, message_dict, start_time)
 
         except Exception as exc:
