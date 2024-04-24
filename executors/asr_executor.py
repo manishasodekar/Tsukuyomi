@@ -37,6 +37,8 @@ class Executor:
                                     stream_key = message_dict.get("care_req_id")
                                     file_path = message_dict.get("file_path")
                                     logger.info(f"Starting ASR  :: {stream_key} :: {file_path}")
+                                    output_language = message_dict.get("output_language")
+                                    logger.info(f"Output language :: {output_language}")
                                     executor.submit(asrexecutor.execute_function, message_dict, start_time)
                                 else:
                                     asrexecutor = ASRExecutor()

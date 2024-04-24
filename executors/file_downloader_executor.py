@@ -35,6 +35,8 @@ class Executor:
                                     stream_key = message_dict.get("care_req_id")
                                     filedownloader = fileDownloader()
                                     logger.info(f"Starting RTMP saver loop :: {stream_key}")
+                                    output_language = message_dict.get("output_language")
+                                    logger.info(f"Output language :: {output_language}")
                                     executor.submit(filedownloader.save_rtmp_loop, message_dict, start_time)
                                 else:
                                     request_id = message_dict.get("request_id")
