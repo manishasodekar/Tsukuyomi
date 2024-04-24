@@ -187,7 +187,7 @@ def websocket_handler(env, start_response):
         IS_RTMP_ALREADY_RUNNING = False
         if not req_type:
             if user_type in {"provider", "inclinic"}:
-                IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp(connection_id, language)
+                IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp(connection_id, language, output_language)
                 IS_RTMP_ALREADY_RUNNING = check_and_start_rtmp_for_connection_id(
                     connection_id, user_type, ws, language
                 )
